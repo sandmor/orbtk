@@ -1,4 +1,4 @@
-use crate::{Color, Number, Property};
+use crate::Property;
 use serde::de::DeserializeOwned;
 /// Wraps a ron value and is used to support conversion to different types.
 pub struct Value(pub ron::Value);
@@ -16,38 +16,10 @@ impl Value {
         T::default()
     }
 
-    pub fn color(&self) -> Option<Color> {
-        let prop = match &self.0 {
+    pub fn prop(&self) -> Property {
+        match &self.0 {
             ron::Value::String(s) => Property::from(&s[..]),
-            _ => return None,
-        };
-        match prop {
-            Property::Color(color) => Some(color),
-            Property::Method(name, args) => {
-                for arg in args.iter() {
-                    match arg {
-                        Property::Number(_, t) if t.is_empty() => {}
-                        _ => {
-                            return None;
-                        }
-                    };
-                }
-                match &name[..] {
-                    "rgb" if args.len() == 3 => Some(Color::rgb(
-                        args[0].as_number().unwrap().into(),
-                        args[1].as_number().unwrap().into(),
-                        args[2].as_number().unwrap().into(),
-                    )),
-                    "rgba" if args.len() == 4 => Some(Color::rgba(
-                        args[0].as_number().unwrap().into(),
-                        args[1].as_number().unwrap().into(),
-                        args[2].as_number().unwrap().into(),
-                        args[3].as_number().unwrap().into(),
-                    )),
-                    _ => None,
-                }
-            }
-            _ => None,
+            _ => Property::default(),
         }
     }
 }
