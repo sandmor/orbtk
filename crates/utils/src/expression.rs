@@ -1,32 +1,39 @@
-use crate::{Color, Number, Brush};
+use crate::{Color, Number, Brush, Operator, LinearGradient};
 use std::iter::Peekable;
 use std::str::Chars;
 
+#[derive(Clone, PartialEq, Debug)]
+pub enum ExprOrOp {
+    Expression(Expression),
+    Operator(Operator),
+}
+
 // Describes a RON declared function.
 #[derive(Clone, PartialEq, Debug)]
-pub enum Property {
-    Color(Color),
-    Method(String, Vec<Property>),
+pub enum Expression {
+    Method(String, Vec<Expression>),
+    Complex(Vec<ExprOrOp>),
     Number(Number, String),
+    Color(Color),
     Other(String),
 }
 
-impl Property {
+impl Expression {
     /// Try to convert `self` into a `Number`
     pub fn as_number(&self) -> Option<Number> {
         match self {
-            Property::Number(number, d) if d.is_empty() => Some(*number),
+            Expression::Number(number, d) if d.is_empty() => Some(*number),
             _ => None,
         }
     }
 
     pub fn color(&self) -> Option<Color> {
         match self {
-            Property::Color(color) => Some(*color),
-            Property::Method(name, args) => {
+            Expression::Color(color) => Some(*color),
+            Expression::Method(name, args) => {
                 for arg in args.iter() {
                     match arg {
-                        Property::Number(_, t) if t.is_empty() => {}
+                        Expression::Number(_, t) if t.is_empty() => {}
                         _ => {
                             return None;
                         }
@@ -51,6 +58,10 @@ impl Property {
         }
     }
 
+    pub fn linear_gradient(&self) -> Option<LinearGradient> {
+        None
+    }
+
     pub fn brush(&self) -> Option<Brush> {
         if let Some(color) = self.color() {
             return Some(Brush::from(color));
@@ -60,45 +71,96 @@ impl Property {
     }
 }
 
-impl Default for Property {
+impl Default for Expression {
     fn default() -> Self {
-        Property::Other("".to_owned())
+        Expression::Complex(Vec::new())
     }
 }
 
-impl From<String> for Property {
+impl From<String> for Expression {
     fn from(s: String) -> Self {
         Self::from(&s[..])
     }
 }
 
-impl From<&str> for Property {
-    fn from(s: &str) -> Property {
+impl From<&str> for Expression {
+    fn from(s: &str) -> Expression {
         let mut s = s.chars().peekable();
-        parse_property(&mut s)
+        let mut v = Vec::new();
+        loop {
+            if let Some(c) = s.peek() {
+                let c = *c;
+                if c.is_whitespace() { // Ignore whitespaces
+                    s.next().unwrap();
+                    continue;
+                }
+                else if c == '+' {
+                    v.push(ExprOrOp::Operator(Operator::Add));
+                    s.next().unwrap();
+                    continue;
+                }
+                else if c == '-' {
+                    v.push(ExprOrOp::Operator(Operator::Sub));
+                    s.next().unwrap();
+                    continue;
+                }
+                else if c == '*' {
+                    v.push(ExprOrOp::Operator(Operator::Mul));
+                    s.next().unwrap();
+                    continue;
+                }
+                else if c == '/' {
+                    v.push(ExprOrOp::Operator(Operator::Div));
+                    s.next().unwrap();
+                    continue;
+                }
+            }
+            else {
+                break;
+            }
+            v.push(ExprOrOp::Expression(parse_expression(&mut s)));
+        }
+        if v.is_empty() {
+            Self::default()
+        }
+        else if v.len() == 1 {
+            match v[0] {
+                ExprOrOp::Expression(ref e) => e.to_owned(),
+                ExprOrOp::Operator(_) => Expression::Complex(v)
+            }
+        }
+        else {
+            Expression::Complex(v)
+        }
     }
 }
 
-impl Into<Number> for Property {
+impl Into<Number> for Expression {
     fn into(self) -> Number {
         match self {
-            Property::Number(num, _) => num,
+            Expression::Number(num, _) => num,
             _ => Number::default(),
         }
     }
 }
 
-fn parse_property(chrs: &mut Peekable<Chars>) -> Property {
+fn parse_expression(chrs: &mut Peekable<Chars>) -> Expression {
     let mut text = String::new();
     let method;
     loop {
-        match chrs.next() {
+        match chrs.peek() {
             Some('(') => {
+                chrs.next().unwrap();
                 method = true;
                 break;
             }
+            Some(c) if *c == ',' || c.is_whitespace() => {
+                method = false;
+                break;
+            }
             Some(c) => {
-                text.push(c);
+                text.push(*c);
+                chrs.next().unwrap();
             }
             None => {
                 method = false;
@@ -118,14 +180,14 @@ fn parse_property(chrs: &mut Peekable<Chars>) -> Property {
                     break;
                 }
                 _ => {
-                    args.push(parse_property(chrs));
+                    args.push(parse_expression(chrs));
                 }
             }
         }
-        Property::Method(text, args)
+        Expression::Method(text, args)
     } else {
         if text.starts_with('#') {
-            return Property::Color(Color::from(text));
+            return Expression::Color(Color::from(text));
         } else if text.starts_with(|x: char| x.is_ascii_digit() || x == '.') {
             if let Some(mut ofs) = text.rfind(|x: char| x.is_ascii_digit() || x == '.') {
                 ofs += 1; // Moves from before last digit to after last digit position
@@ -134,15 +196,15 @@ fn parse_property(chrs: &mut Peekable<Chars>) -> Property {
                     .is_some()
                 {
                     if let Ok(v) = lexical_core::parse(text[..ofs].as_bytes()) {
-                        return Property::Number(Number::Float(v), text[ofs..].to_owned());
+                        return Expression::Number(Number::Float(v), text[ofs..].to_owned());
                     }
                 } else {
                     if let Ok(v) = lexical_core::parse(text[..ofs].as_bytes()) {
-                        return Property::Number(Number::Real(v), text[ofs..].to_owned());
+                        return Expression::Number(Number::Real(v), text[ofs..].to_owned());
                     }
                 }
             }
         }
-        Property::Other(text)
+        Expression::Other(text)
     }
 }
