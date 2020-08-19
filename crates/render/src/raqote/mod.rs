@@ -463,7 +463,7 @@ fn brush_to_source<'a>(brush: &Brush) -> raqote::Source<'a> {
             b: color.b(),
             a: color.a(),
         }),
-        Brush::LinearGradient { start, end, stops } => {
+        Brush::LinearGradient(LinearGradient { start, end, stops }) => {
             let g_stops = stops
                 .iter()
                 .map(|stop| raqote::GradientStop {
