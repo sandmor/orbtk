@@ -1,4 +1,4 @@
-use crate::{Color, Number};
+use crate::{Color, Number, Brush};
 use std::iter::Peekable;
 use std::str::Chars;
 
@@ -18,6 +18,51 @@ impl Property {
             Property::Number(number, d) if d.is_empty() => Some(*number),
             _ => None,
         }
+    }
+
+    pub fn color(&self) -> Option<Color> {
+        match self {
+            Property::Color(color) => Some(*color),
+            Property::Method(name, args) => {
+                for arg in args.iter() {
+                    match arg {
+                        Property::Number(_, t) if t.is_empty() => {}
+                        _ => {
+                            return None;
+                        }
+                    };
+                }
+                match &name[..] {
+                    "rgb" if args.len() == 3 => Some(Color::rgb(
+                        args[0].as_number().unwrap().into(),
+                        args[1].as_number().unwrap().into(),
+                        args[2].as_number().unwrap().into(),
+                    )),
+                    "rgba" if args.len() == 4 => Some(Color::rgba(
+                        args[0].as_number().unwrap().into(),
+                        args[1].as_number().unwrap().into(),
+                        args[2].as_number().unwrap().into(),
+                        args[3].as_number().unwrap().into(),
+                    )),
+                    _ => None,
+                }
+            }
+            _ => None,
+        }
+    }
+
+    pub fn brush(&self) -> Option<Brush> {
+        if let Some(color) = self.color() {
+            return Some(Brush::from(color));
+        }
+        // TODO
+        None
+    }
+}
+
+impl Default for Property {
+    fn default() -> Self {
+        Property::Other("".to_owned())
     }
 }
 
