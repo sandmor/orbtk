@@ -1,4 +1,5 @@
-use crate::{Color, Number, Brush, Operator, LinearGradient};
+use crate::{Brush, Color, GradientStop, LinearGradient, Number, Operator};
+use std::f64;
 use std::iter::Peekable;
 use std::str::Chars;
 
@@ -6,6 +7,15 @@ use std::str::Chars;
 pub enum ExprOrOp {
     Expression(Expression),
     Operator(Operator),
+}
+
+impl ExprOrOp {
+    pub fn expression(&self) -> Option<&Expression> {
+        match self {
+            Self::Expression(e) => Some(e),
+            _ => None,
+        }
+    }
 }
 
 // Describes a RON declared function.
@@ -20,7 +30,7 @@ pub enum Expression {
 
 impl Expression {
     /// Try to convert `self` into a `Number`
-    pub fn as_number(&self) -> Option<Number> {
+    pub fn number(&self) -> Option<Number> {
         match self {
             Expression::Number(number, d) if d.is_empty() => Some(*number),
             _ => None,
@@ -41,15 +51,15 @@ impl Expression {
                 }
                 match &name[..] {
                     "rgb" if args.len() == 3 => Some(Color::rgb(
-                        args[0].as_number().unwrap().into(),
-                        args[1].as_number().unwrap().into(),
-                        args[2].as_number().unwrap().into(),
+                        args[0].number().unwrap().into(),
+                        args[1].number().unwrap().into(),
+                        args[2].number().unwrap().into(),
                     )),
                     "rgba" if args.len() == 4 => Some(Color::rgba(
-                        args[0].as_number().unwrap().into(),
-                        args[1].as_number().unwrap().into(),
-                        args[2].as_number().unwrap().into(),
-                        args[3].as_number().unwrap().into(),
+                        args[0].number().unwrap().into(),
+                        args[1].number().unwrap().into(),
+                        args[2].number().unwrap().into(),
+                        args[3].number().unwrap().into(),
                     )),
                     _ => None,
                 }
@@ -58,16 +68,88 @@ impl Expression {
         }
     }
 
-    pub fn linear_gradient(&self) -> Option<LinearGradient> {
-        None
+    pub fn angle(&self) -> Option<f64> {
+        match self {
+            Expression::Number(num, unit) => {
+                let num: f64 = (*num).into();
+                Some(match &unit[..] {
+                    "rad" => num,
+                    "turn" => f64::consts::PI * 2.0 * num,
+                    _ => {
+                        // Fallback to degrees
+                        num * f64::consts::PI / 180.0
+                    }
+                })
+            }
+            Expression::Other(label) => match &label[..] {
+                "to top" => Some(f64::consts::PI * 2.0 * 0.0),
+                "to right" => Some(f64::consts::PI * 2.0 * 0.25),
+                "to bottom" => Some(f64::consts::PI * 2.0 * 0.5),
+                "to left" => Some(f64::consts::PI * 2.0 * 0.75),
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+
+    pub fn gradient_stop(&self) -> Option<GradientStop> {
+        if let Some(color) = self.color() {
+            return Some(GradientStop {
+                position: f64::NAN,
+                color,
+            });
+        }
+        match self {
+            Expression::Complex(v) if v.len() == 2 => {
+                let color = match v[0].expression().and_then(|e| e.color()) {
+                    Some(color) => color,
+                    None => return None,
+                };
+                let position = match v[1].expression() {
+                    Some(Expression::Number(number, p)) if p == "%" => (*number).into(),
+                    _ => return None,
+                };
+                Some(GradientStop { position, color })
+            }
+            _ => None,
+        }
     }
 
     pub fn brush(&self) -> Option<Brush> {
         if let Some(color) = self.color() {
             return Some(Brush::from(color));
         }
-        // TODO
-        None
+        let (name, args) = match self {
+            Expression::Method(name, args) => (name, args),
+            _ => return None,
+        };
+        match &name[..] {
+            "linear-gradient" if !args.is_empty() => {
+                let mut i = 0;
+                let mut angle = 0.0;
+                if let Some(defined_angle) = args[0].angle() {
+                    angle = defined_angle;
+                    i += 1;
+                }
+                let mut stops = Vec::new();
+                while i < args.len() {
+                    let stop = match args[i].gradient_stop() {
+                        Some(stop) => stop,
+                        None => continue
+                    };
+                    stops.push(stop);
+                    i += 1;
+                }
+                if stops.is_empty() {
+                    return None;
+                }
+                else if stops.len() == 1 {
+                    return Some(Brush::SolidColor(stops[0].color));
+                }
+                todo!()
+            }
+            _ => None,
+        }
     }
 }
 
@@ -90,46 +172,40 @@ impl From<&str> for Expression {
         loop {
             if let Some(c) = s.peek() {
                 let c = *c;
-                if c.is_whitespace() { // Ignore whitespaces
+                if c.is_whitespace() {
+                    // Ignore whitespaces
                     s.next().unwrap();
                     continue;
-                }
-                else if c == '+' {
+                } else if c == '+' {
                     v.push(ExprOrOp::Operator(Operator::Add));
                     s.next().unwrap();
                     continue;
-                }
-                else if c == '-' {
+                } else if c == '-' {
                     v.push(ExprOrOp::Operator(Operator::Sub));
                     s.next().unwrap();
                     continue;
-                }
-                else if c == '*' {
+                } else if c == '*' {
                     v.push(ExprOrOp::Operator(Operator::Mul));
                     s.next().unwrap();
                     continue;
-                }
-                else if c == '/' {
+                } else if c == '/' {
                     v.push(ExprOrOp::Operator(Operator::Div));
                     s.next().unwrap();
                     continue;
                 }
-            }
-            else {
+            } else {
                 break;
             }
             v.push(ExprOrOp::Expression(parse_expression(&mut s)));
         }
         if v.is_empty() {
             Self::default()
-        }
-        else if v.len() == 1 {
+        } else if v.len() == 1 {
             match v[0] {
                 ExprOrOp::Expression(ref e) => e.to_owned(),
-                ExprOrOp::Operator(_) => Expression::Complex(v)
+                ExprOrOp::Operator(_) => Expression::Complex(v),
             }
-        }
-        else {
+        } else {
             Expression::Complex(v)
         }
     }
@@ -154,7 +230,12 @@ fn parse_expression(chrs: &mut Peekable<Chars>) -> Expression {
                 method = true;
                 break;
             }
-            Some(c) if *c == ',' || c.is_whitespace() => {
+            Some(c)
+                if *c == ','
+                    || (c.is_whitespace()
+                        && text
+                            .starts_with(|x: char| x == '#' || x.is_ascii_digit() || x == '.')) =>
+            {
                 method = false;
                 break;
             }
