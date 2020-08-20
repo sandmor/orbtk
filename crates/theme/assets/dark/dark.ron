@@ -33,7 +33,7 @@ Theme (
                 "foreground": "$LINK_WATER",
                 "icon_brush": "$LINK_WATER",
                 //"background": "$LYNCH",
-                "background": "linear-gradient(0deg, #ff0000, #ffffff, #00ff00)",
+                "background": "linear-gradient(#f0f0f0, #121212 40%, #ffffff, #121212 60%, #ff0000)",
                 "border_radius": 4,
             }, 
             states: {
