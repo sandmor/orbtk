@@ -639,11 +639,14 @@ fn brush_to_source<'a>(brush: &Brush, frame: Rectangle) -> raqote::Source<'a> {
                     )
                 }
                 GradientCoords::Angle { radians } => {
-                    let rad = *radians;
+                    let mut rad = *radians;
+                    rad += PI / 2.0; // Rotate 90° to make angle 0° point to top
+                    rad = PI * 2.0 - rad; // Invert angle direction to make it clockwise
+                    rad = (rad % (PI * 2.0)).abs();
                     let a = frame.width();
                     let b = frame.height();
                     let c = (b / a).atan();
-                    let z;
+                    let mut z;
                     // - = FALSE
                     // X------X X = T
                     // XX----XX     R
@@ -655,10 +658,16 @@ fn brush_to_source<'a>(brush: &Brush, frame: Rectangle) -> raqote::Source<'a> {
                     if (rad >= PI * 2.0 - c || rad <= c) || (rad >= PI-c && rad <= PI+c) {
                         // X: True
                         z = Point::new(a / 2.0, (a * rad.sin()) / (2.0 * rad.cos()));
+                        if rad >= PI * 2.0 - c || rad <= c {
+                            z = -z;
+                        }
                     }
                     else {
                         // -: False
                         z = Point::new((b * rad.cos()) / (2.0 * rad.sin()), b / 2.0);
+                        if rad >= PI+c || rad <= PI * 2.0 - c {
+                            z = -z;
+                        }
                     }
                     let start = frame.position() + (frame.size() / 2.0) + -z;
                     let end = frame.position() + (frame.size() / 2.0) + z;
