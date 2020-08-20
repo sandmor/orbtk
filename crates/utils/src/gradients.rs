@@ -7,10 +7,25 @@ pub struct GradientStop {
     pub color: Color,
 }
 
+#[derive(Copy, Clone, PartialEq, Debug)]
+pub enum GradientCoords {
+    Ends {
+        start: Point,
+        end: Point
+    },
+    Angle {
+        radians: f64
+    }
+}
+
 /// Describes a colorful linear gradient.
 #[derive(Clone, PartialEq, Debug)]
-pub struct LinearGradient {
-    pub start: Point,
-    pub end: Point,
+pub struct Gradient {
+    pub coords: GradientCoords,
     pub stops: Vec<GradientStop>,
+}
+
+#[derive(Copy, Clone, PartialEq, Debug)]
+pub enum GradientKind {
+    Linear
 }

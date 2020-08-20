@@ -1,4 +1,4 @@
-use crate::{Brush, Color, GradientStop, LinearGradient, Number, Operator};
+use crate::prelude::*;
 use std::f64;
 use std::iter::Peekable;
 use std::str::Chars;
@@ -55,7 +55,29 @@ impl Expression {
                         args[1].number().unwrap().into(),
                         args[2].number().unwrap().into(),
                     )),
+                    "hsv" if args.len() == 3 => Some(Color::hsv(
+                        args[0].number().unwrap().into(),
+                        args[1].number().unwrap().into(),
+                        args[2].number().unwrap().into(),
+                    )),
+                    "hsl" if args.len() == 3 => Some(Color::hsl(
+                        args[0].number().unwrap().into(),
+                        args[1].number().unwrap().into(),
+                        args[2].number().unwrap().into(),
+                    )),
                     "rgba" if args.len() == 4 => Some(Color::rgba(
+                        args[0].number().unwrap().into(),
+                        args[1].number().unwrap().into(),
+                        args[2].number().unwrap().into(),
+                        args[3].number().unwrap().into(),
+                    )),
+                    "hsva" if args.len() == 4 => Some(Color::hsva(
+                        args[0].number().unwrap().into(),
+                        args[1].number().unwrap().into(),
+                        args[2].number().unwrap().into(),
+                        args[3].number().unwrap().into(),
+                    )),
+                    "hsla" if args.len() == 4 => Some(Color::hsla(
                         args[0].number().unwrap().into(),
                         args[1].number().unwrap().into(),
                         args[2].number().unwrap().into(),
@@ -72,22 +94,28 @@ impl Expression {
         match self {
             Expression::Number(num, unit) => {
                 let num: f64 = (*num).into();
-                Some(match &unit[..] {
+                let mut angle = match &unit[..] {
                     "rad" => num,
                     "turn" => f64::consts::PI * 2.0 * num,
                     _ => {
                         // Fallback to degrees
                         num * f64::consts::PI / 180.0
                     }
-                })
+                };
+                angle = (angle % (f64::consts::PI * 2.0)).abs();
+                Some(angle)
             }
-            Expression::Other(label) => match &label[..] {
+/*            Expression::Other(label) => match &label[..] {
                 "to top" => Some(f64::consts::PI * 2.0 * 0.0),
+                "to top right" => Some(f64::consts::PI * 2.0 * 0.125),
                 "to right" => Some(f64::consts::PI * 2.0 * 0.25),
+                "to bottom right" => Some(f64::consts::PI * 2.0 * 0.375),
                 "to bottom" => Some(f64::consts::PI * 2.0 * 0.5),
+                "to bottom left" => Some(f64::consts::PI * 2.0 * 0.625),
                 "to left" => Some(f64::consts::PI * 2.0 * 0.75),
+                "to top left" => Some(f64::consts::PI * 2.0 * 0.875),
                 _ => None,
-            },
+            },*/
             _ => None,
         }
     }
@@ -105,10 +133,11 @@ impl Expression {
                     Some(color) => color,
                     None => return None,
                 };
-                let position = match v[1].expression() {
+                let mut position = match v[1].expression() {
                     Some(Expression::Number(number, p)) if p == "%" => (*number).into(),
                     _ => return None,
                 };
+                position /= 100.0;
                 Some(GradientStop { position, color })
             }
             _ => None,
@@ -132,21 +161,66 @@ impl Expression {
                     i += 1;
                 }
                 let mut stops = Vec::new();
-                while i < args.len() {
+                for i in i..args.len() {
                     let stop = match args[i].gradient_stop() {
                         Some(stop) => stop,
-                        None => continue
+                        None => continue,
                     };
                     stops.push(stop);
-                    i += 1;
                 }
                 if stops.is_empty() {
                     return None;
-                }
-                else if stops.len() == 1 {
+                } else if stops.len() == 1 {
                     return Some(Brush::SolidColor(stops[0].color));
                 }
-                todo!()
+                let mut cursor = 0;
+                while cursor < stops.len() {
+                    if stops[cursor].position.is_nan() {
+                        let mut second_cursor = cursor;
+                        // this is the same second_cursor != stops.len(), but I want to make this explicit
+                        let mut has_end = false;
+                        while second_cursor < stops.len() {
+                            if !stops[second_cursor].position.is_nan() {
+                                has_end = true;
+                                break;
+                            }
+                            second_cursor += 1;
+                        }
+                        let from_pos = match cursor == 0 {
+                            true => 0.0,
+                            false => {
+                                debug_assert!(!stops[cursor-1].position.is_nan());
+                                stops[cursor-1].position
+                            }
+                        };
+                        let to_pos = match has_end {
+                            true => {
+                                debug_assert!(!stops[second_cursor].position.is_nan());
+                                stops[second_cursor].position
+                            },
+                            false => 1.0
+                        };
+                        let mut count = (second_cursor - cursor) as f64;
+                        if !has_end {
+                            count -= 1.0;
+                        }
+                        for i in cursor..second_cursor {
+                            stops[i].position = from_pos + (to_pos - from_pos) / count * (i as f64);
+                        }
+                        cursor = second_cursor;
+                    }
+                    else {
+                        cursor += 1;
+                    }
+                }
+                dbg!(&stops);
+                Some(Brush::Gradient(
+                    GradientKind::Linear,
+                    Gradient {
+                        coords: GradientCoords::Angle { radians: angle },
+                        stops,
+                    },
+                ))
             }
             _ => None,
         }
@@ -231,9 +305,9 @@ fn parse_expression(chrs: &mut Peekable<Chars>) -> Expression {
                 break;
             }
             Some(c)
-                if *c == ','
+                if *c == ',' || *c == ')'
                     || (c.is_whitespace()
-                        && text
+                        && !text
                             .starts_with(|x: char| x == '#' || x.is_ascii_digit() || x == '.')) =>
             {
                 method = false;
@@ -253,7 +327,7 @@ fn parse_expression(chrs: &mut Peekable<Chars>) -> Expression {
         let mut args = Vec::new();
         loop {
             match chrs.peek() {
-                Some(',') => {
+                Some(c) if c.is_whitespace() || *c == ',' => {
                     chrs.next().unwrap();
                 }
                 None | Some(')') => {

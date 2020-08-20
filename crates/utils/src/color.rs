@@ -16,11 +16,69 @@ impl Color {
         }
     }
 
+    /// Create a new color from HSV(0.0-360.0, 0.0-1.0, 0.0-1.0)
+    pub fn hsv(h: f64, s: f64, v: f64) -> Self {
+        Self::hsva(h, s, v, 1.0)
+    }
+
+    /// Create a new color from HSL(0.0-360.0, 0.0-1.0, 0.0-1.0)
+    pub fn hsl(h: f64, s: f64, l: f64) -> Self {
+        Self::hsla(h, s, l, 1.0)
+    }
+
     /// Create a new color from RGB and alpha values
     pub const fn rgba(r: u8, g: u8, b: u8, a: u8) -> Self {
         Color {
             data: ((a as u32) << 24) | ((r as u32) << 16) | ((g as u32) << 8) | (b as u32),
         }
+    }
+
+    /// Create a new color from HSV(0.0-360.0, 0.0-1.0, 0.0-1.0) and alpha values(0.0-1.0)
+    pub fn hsva(mut h: f64, mut s: f64, mut v: f64, a: f64) -> Self {
+        h = h % 360.0;
+        s = s % 1.0;
+        v = v % 1.0;
+        let hh = h / 60.0;
+        let i = hh.floor() as i32;
+        let ff = hh.fract();
+        let p = v * (1.0 - s);
+        let q = v * (1.0 - (s * ff));
+        let t = v * (1.0 - (s * (1.0 - ff)));
+        let (r, g, b) = match i {
+            0 => (v, t, p),
+            1 => (q, v, p),
+            2 => (p, v, t),
+            3 => (p, q, v),
+            4 => (t, p, v),
+            5 => (v, p, q),
+            _ => unreachable!()
+        };
+        Self::rgba((r * 255.0) as u8, (g * 255.0) as u8, (b * 255.0) as u8, (a * 255.0) as u8)
+    }
+
+    /// Create a new color from HSL(0.0-360.0, 0.0-1.0, 0.0-1.0) and alpha values(0.0-1.0)
+    pub fn hsla(mut h: f64, mut s: f64, mut l: f64, a: f64) -> Self {
+        h = h % 360.0;
+        s = s % 1.0;
+        l = l % 1.0;
+        let hh = h / 60.0;
+        let i = hh.floor() as i32;
+        let chroma = (1.0 - ((2.0 * l) - 1.0).abs()) * s;
+        let second_component = chroma * (1.0 - (((i % 2) as f64) - 1.0).abs());
+        let (mut r, mut g, mut b) = match i {
+            0 => (chroma, second_component, 0.0),
+            1 => (second_component, chroma, 0.0),
+            2 => (0.0, chroma, second_component),
+            3 => (0.0, second_component, chroma),
+            4 => (second_component, 0.0, chroma),
+            5 => (chroma, 0.0, second_component),
+            _ => unreachable!()
+        };
+        let adjustment = l - chroma / 2.0;
+        r += adjustment;
+        g += adjustment;
+        b += adjustment;
+        Self::rgba((r.min(1.0) * 255.0) as u8, (g.min(1.0) * 255.0) as u8, (b.min(1.0) * 255.0) as u8, (a * 255.0) as u8)
     }
 
     /// Get the r value

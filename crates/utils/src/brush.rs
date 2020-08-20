@@ -7,7 +7,7 @@ pub enum Brush {
     SolidColor(Color),
 
     /// Paints an area with a linear gradient.
-    LinearGradient(LinearGradient),
+    Gradient(GradientKind, Gradient),
 }
 
 impl Brush {
@@ -42,13 +42,13 @@ impl From<Color> for Brush {
 
 impl From<&str> for Brush {
     fn from(s: &str) -> Brush {
-        Brush::SolidColor(Color::from(s))
+        Expression::from(s).brush().unwrap_or_default()
     }
 }
 
 impl From<String> for Brush {
     fn from(s: String) -> Brush {
-        Brush::SolidColor(Color::from(s))
+        Self::from(&s[..])
     }
 }
 
