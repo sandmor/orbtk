@@ -1,6 +1,8 @@
 use std::{cmp, collections::HashMap};
 
 use crate::{utils::*, PipelineTrait, RenderConfig, RenderTarget, TextMetrics};
+use raqote::PathOp;
+use std::f64::consts::PI;
 
 pub use self::font::*;
 pub use self::image::Image;
@@ -63,6 +65,151 @@ impl RenderContext2D {
         }
     }
 
+    pub fn path_rect(&self) -> Rectangle {
+        let mut rect = Rectangle::new((0.0, 0.0), (0.0, 0.0));
+        let mut first = true;
+        for i in 0..self.path.ops.len() {
+            let x1;
+            let y1;
+            let x2;
+            let y2;
+            match self.path.ops[i] {
+                PathOp::MoveTo(point) | PathOp::LineTo(point) => {
+                    x1 = point.x as f64;
+                    x2 = x1;
+                    y1 = point.y as f64;
+                    y2 = y1;
+                }
+                PathOp::Close if i == 0 => {
+                    x1 = 0.0;
+                    y1 = 0.0;
+                    x2 = x1;
+                    y2 = y1;
+                },
+                PathOp::Close => {
+                    continue;
+                }
+                PathOp::QuadTo(p1, p2) => {
+                    let p0 = match i == 0 {
+                        true => raqote::Point::new(0.0, 0.0),
+                        false => match self.path.ops[i - 1] {
+                            PathOp::MoveTo(p)
+                            | PathOp::LineTo(p)
+                            | PathOp::QuadTo(_, p)
+                            | PathOp::CubicTo(_, _, p) => p,
+                            PathOp::Close => match self.path.ops[0] {
+                                PathOp::MoveTo(p)
+                                | PathOp::LineTo(p)
+                                | PathOp::QuadTo(_, p)
+                                | PathOp::CubicTo(_, _, p) => p,
+                                PathOp::Close => raqote::Point::new(0.0, 0.0),
+                            },
+                        },
+                    };
+                    let p0 = Point::from((p0.x as f64, p0.y as f64));
+                    let p1 = Point::from((p1.x as f64, p1.y as f64));
+                    let p2 = Point::from((p2.x as f64, p2.y as f64));
+                    let mut mi = p0.min(p2);
+                    let mut ma = p0.max(p2);
+
+                    if p1.x() < mi.x() && p1.x() > ma.x() || p1.y() < mi.y() || p1.y() > ma.y() {
+                        let t = ((p0 - p1) / (p0 - 2.0 * p1 + p2)).clamp(0.0, 1.0);
+                        let s = Point::from(1.0) - t;
+                        let q = s*s*p0 + 2.0*s*t*p1 + t*t*p2;
+                        mi = mi.min(q);
+                        ma = ma.max(q);
+                    }
+                    x1 = mi.x();
+                    y1 = mi.y();
+                    x2 = ma.x();
+                    y2 = ma.y();
+                }
+                PathOp::CubicTo(p1, p2, p3) => {
+                    let p0 = match i == 0 {
+                        true => raqote::Point::new(0.0, 0.0),
+                        false => match self.path.ops[i - 1] {
+                            PathOp::MoveTo(p)
+                            | PathOp::LineTo(p)
+                            | PathOp::QuadTo(_, p)
+                            | PathOp::CubicTo(_, _, p) => p,
+                            PathOp::Close => match self.path.ops[0] {
+                                PathOp::MoveTo(p)
+                                | PathOp::LineTo(p)
+                                | PathOp::QuadTo(_, p)
+                                | PathOp::CubicTo(_, _, p) => p,
+                                PathOp::Close => raqote::Point::new(0.0, 0.0),
+                            },
+                        },
+                    };
+                    let p0 = Point::from((p0.x as f64, p0.y as f64));
+                    let p1 = Point::from((p1.x as f64, p1.y as f64));
+                    let p2 = Point::from((p2.x as f64, p2.y as f64));
+                    let p3 = Point::from((p3.x as f64, p3.y as f64));
+                    let mut mi = p0.min(p3);
+                    let mut ma = p0.max(p3);
+
+                    let c = -1.0 * p0 + 1.0 * p1;
+                    let b = 1.0 * p0 - 2.0 * p1 + 1.0 * p2;
+                    let a = -1.0 * p0 + 3.0 * p1 - 3.0 * p2 + 1.0 * p3;
+
+                    let h = b * b - a * c;
+                    if h.x() > 0.0 || h.y() > 0.0 {
+                        let g = h.abs().sqrt();
+                        let t1 = ((-b - g) / a).clamp(0.0, 1.0);
+                        let t2 = ((-b + g) / a).clamp(0.0, 1.0);
+                        let s1 = Point::from(1.0) - t1;
+                        let s2 = Point::from(1.0) - t2;
+                        let q1 = s1 * s1 * s1 * p0
+                            + 3.0 * s1 * s1 * t1 * p1
+                            + 3.0 * s1 * t1 * t1 * p2
+                            + t1 * t1 * t1 * p3;
+                        let q2 = s2 * s2 * s2 * p0
+                            + 3.0 * s2 * s2 * t2 * p1
+                            + 3.0 * s2 * t2 * t2 * p2
+                            + t2 * t2 * t2 * p3;
+
+                        if h.x() > 0.0 {
+                            mi.set_x(mi.x().min(q1.x().min(q2.x())));
+                            ma.set_x(ma.x().max(q1.x().max(q2.x())));
+                        }
+
+                        if h.y() > 0.0 {
+                            mi.set_y(mi.y().min(q1.y().min(q2.y())));
+                            ma.set_y(ma.y().max(q1.y().max(q2.y())));
+                        }
+                    }
+                    x1 = mi.x();
+                    y1 = mi.y();
+                    x2 = ma.x();
+                    y2 = ma.y();
+                }
+            }
+            if first == true {
+                first = false;
+                rect.set_x(x1);
+                rect.set_y(y1);
+                rect.set_width(x2 - x1);
+                rect.set_height(y2 - y1);
+            } else {
+                if x1 < rect.x() {
+                    rect.set_width(rect.width()+rect.x()-x1);
+                    rect.set_x(x1);
+                }
+                if y1 < rect.y() {
+                    rect.set_height(rect.height()+rect.y()-y1);
+                    rect.set_y(y1);
+                }
+                if x2 > rect.x() + rect.width() {
+                    rect.set_width(x2 - rect.x());
+                }
+                if y2 > rect.y() + rect.height() {
+                    rect.set_height(y2 - rect.y());
+                }
+            }
+        }
+        rect
+    }
+
     // Rectangles
 
     /// Draws a filled rectangle whose starting point is at the coordinates {x, y} with the specified width and height and whose style is determined by the fillStyle attribute.
@@ -72,7 +219,10 @@ impl RenderContext2D {
             y as f32,
             width as f32,
             height as f32,
-            &brush_to_source(&self.config.fill_style),
+            &brush_to_source(
+                &self.config.fill_style,
+                Rectangle::new((x, y), (width, height)),
+            ),
             &raqote::DrawOptions {
                 alpha: self.config.alpha,
                 ..Default::default()
@@ -159,7 +309,7 @@ impl RenderContext2D {
     pub fn fill(&mut self) {
         self.draw_target.fill(
             &self.path,
-            &brush_to_source(&self.config.fill_style),
+            &brush_to_source(&self.config.fill_style, self.path_rect()),
             &raqote::DrawOptions {
                 alpha: self.config.alpha,
                 ..Default::default()
@@ -171,7 +321,7 @@ impl RenderContext2D {
     pub fn stroke(&mut self) {
         self.draw_target.stroke(
             &self.path,
-            &brush_to_source(&self.config.stroke_style),
+            &brush_to_source(&self.config.stroke_style, self.path_rect()),
             &raqote::StrokeStyle {
                 width: self.config.line_width as f32,
                 ..Default::default()
@@ -455,7 +605,7 @@ impl RenderContext2D {
     pub fn finish(&mut self) {}
 }
 
-fn brush_to_source<'a>(brush: &Brush) -> raqote::Source<'a> {
+fn brush_to_source<'a>(brush: &Brush, frame: Rectangle) -> raqote::Source<'a> {
     match brush {
         Brush::SolidColor(color) => raqote::Source::Solid(raqote::SolidSource {
             r: color.r(),
@@ -463,11 +613,11 @@ fn brush_to_source<'a>(brush: &Brush) -> raqote::Source<'a> {
             b: color.b(),
             a: color.a(),
         }),
-        Brush::LinearGradient(LinearGradient { start, end, stops }) => {
+        Brush::Gradient(GradientKind::Linear, Gradient { coords, stops }) => {
             let g_stops = stops
                 .iter()
                 .map(|stop| raqote::GradientStop {
-                    position: stop.position as f32,
+                    position: (stop.position as f32),
                     color: raqote::Color::new(
                         stop.color.a(),
                         stop.color.r(),
@@ -477,12 +627,49 @@ fn brush_to_source<'a>(brush: &Brush) -> raqote::Source<'a> {
                 })
                 .collect();
 
-            raqote::Source::new_linear_gradient(
-                raqote::Gradient { stops: g_stops },
-                raqote::Point::new(start.x() as f32, start.y() as f32),
-                raqote::Point::new(end.x() as f32, start.y() as f32),
-                raqote::Spread::Pad,
-            )
+            match coords {
+                GradientCoords::Ends { start, end } => {
+                    let start = frame.position() + *start;
+                    let end = frame.position() + *end;
+                    raqote::Source::new_linear_gradient(
+                        raqote::Gradient { stops: g_stops },
+                        raqote::Point::new(start.x() as f32, start.y() as f32),
+                        raqote::Point::new(end.x() as f32, end.y() as f32),
+                        raqote::Spread::Repeat,
+                    )
+                }
+                GradientCoords::Angle { radians } => {
+                    let rad = *radians;
+                    let a = frame.width();
+                    let b = frame.height();
+                    let c = (b / a).atan();
+                    let z;
+                    // - = FALSE
+                    // X------X X = T
+                    // XX----XX     R
+                    // XXX--XXX     U
+                    // XXXXXXXX     E
+                    // XXX--XXX
+                    // XX----XX
+                    // X------X
+                    if (rad >= PI * 2.0 - c || rad <= c) || (rad >= PI-c && rad <= PI+c) {
+                        // X: True
+                        z = Point::new(a / 2.0, (a * rad.sin()) / (2.0 * rad.cos()));
+                    }
+                    else {
+                        // -: False
+                        z = Point::new((b * rad.cos()) / (2.0 * rad.sin()), b / 2.0);
+                    }
+                    let start = frame.position() + (frame.size() / 2.0) + -z;
+                    let end = frame.position() + (frame.size() / 2.0) + z;
+                    raqote::Source::new_linear_gradient(
+                        raqote::Gradient { stops: g_stops },
+                        raqote::Point::new(start.x() as f32, start.y() as f32),
+                        raqote::Point::new(end.x() as f32, end.y() as f32),
+                        raqote::Spread::Repeat,
+                    )
+                }
+            }
         }
     }
 }
