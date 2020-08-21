@@ -1,21 +1,23 @@
-use crate::{Point, Color};
+use crate::{Color, Direction, Point};
 
 /// Describes a position on a colorful gradient.
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub struct GradientStop {
-    pub position: f64,
+    pub kind: GradientStopKind,
     pub color: Color,
 }
 
 #[derive(Copy, Clone, PartialEq, Debug)]
+pub enum GradientStopKind {
+    Interpolated,
+    Fixed(f64),
+}
+
+#[derive(Copy, Clone, PartialEq, Debug)]
 pub enum GradientCoords {
-    Ends {
-        start: Point,
-        end: Point
-    },
-    Angle {
-        radians: f64
-    }
+    Ends { start: Point, end: Point },
+    Angle { radians: f64 },
+    Direction(Direction),
 }
 
 /// Describes a colorful linear gradient.
@@ -27,5 +29,5 @@ pub struct Gradient {
 
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub enum GradientKind {
-    Linear
+    Linear,
 }
