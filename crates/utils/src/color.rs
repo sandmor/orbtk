@@ -35,9 +35,11 @@ impl Color {
 
     /// Create a new color from HSV(0.0-360.0, 0.0-1.0, 0.0-1.0) and alpha values(0.0-1.0)
     pub fn hsva(mut h: f64, mut s: f64, mut v: f64, a: f64) -> Self {
+        dbg!((h, s, v));
         h = h % 360.0;
-        s = s % 1.0;
-        v = v % 1.0;
+        s = s.max(0.0).min(1.0);
+        v = v.max(0.0).min(1.0);
+        dbg!((h, s, v));
         let hh = h / 60.0;
         let i = hh.floor() as i32;
         let ff = hh.fract();
@@ -53,14 +55,15 @@ impl Color {
             5 => (v, p, q),
             _ => unreachable!()
         };
+        dbg!((p, q, t));
         Self::rgba((r * 255.0) as u8, (g * 255.0) as u8, (b * 255.0) as u8, (a * 255.0) as u8)
     }
 
     /// Create a new color from HSL(0.0-360.0, 0.0-1.0, 0.0-1.0) and alpha values(0.0-1.0)
     pub fn hsla(mut h: f64, mut s: f64, mut l: f64, a: f64) -> Self {
         h = h % 360.0;
-        s = s % 1.0;
-        l = l % 1.0;
+        s = s.max(0.0).min(1.0);
+        l = l.max(0.0).min(1.0);
         let hh = h / 60.0;
         let i = hh.floor() as i32;
         let chroma = (1.0 - ((2.0 * l) - 1.0).abs()) * s;

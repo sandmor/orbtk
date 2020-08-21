@@ -85,7 +85,7 @@ impl RenderContext2D {
                     y1 = 0.0;
                     x2 = x1;
                     y2 = y1;
-                },
+                }
                 PathOp::Close => {
                     continue;
                 }
@@ -115,7 +115,7 @@ impl RenderContext2D {
                     if p1.x() < mi.x() && p1.x() > ma.x() || p1.y() < mi.y() || p1.y() > ma.y() {
                         let t = ((p0 - p1) / (p0 - 2.0 * p1 + p2)).clamp(0.0, 1.0);
                         let s = Point::from(1.0) - t;
-                        let q = s*s*p0 + 2.0*s*t*p1 + t*t*p2;
+                        let q = s * s * p0 + 2.0 * s * t * p1 + t * t * p2;
                         mi = mi.min(q);
                         ma = ma.max(q);
                     }
@@ -192,11 +192,11 @@ impl RenderContext2D {
                 rect.set_height(y2 - y1);
             } else {
                 if x1 < rect.x() {
-                    rect.set_width(rect.width()+rect.x()-x1);
+                    rect.set_width(rect.width() + rect.x() - x1);
                     rect.set_x(x1);
                 }
                 if y1 < rect.y() {
-                    rect.set_height(rect.height()+rect.y()-y1);
+                    rect.set_height(rect.height() + rect.y() - y1);
                     rect.set_y(y1);
                 }
                 if x2 > rect.x() + rect.width() {
@@ -614,18 +614,7 @@ fn brush_to_source<'a>(brush: &Brush, frame: Rectangle) -> raqote::Source<'a> {
             a: color.a(),
         }),
         Brush::Gradient(GradientKind::Linear, Gradient { coords, stops }) => {
-            let g_stops = stops
-                .iter()
-                .map(|stop| raqote::GradientStop {
-                    position: (stop.position as f32),
-                    color: raqote::Color::new(
-                        stop.color.a(),
-                        stop.color.r(),
-                        stop.color.g(),
-                        stop.color.b(),
-                    ),
-                })
-                .collect();
+            let g_stops = build_gradient(&stops);
 
             match coords {
                 GradientCoords::Ends { start, end } => {
@@ -655,17 +644,16 @@ fn brush_to_source<'a>(brush: &Brush, frame: Rectangle) -> raqote::Source<'a> {
                     // XXX--XXX
                     // XX----XX
                     // X------X
-                    if (rad >= PI * 2.0 - c || rad <= c) || (rad >= PI-c && rad <= PI+c) {
+                    if (rad >= PI * 2.0 - c || rad <= c) || (rad >= PI - c && rad <= PI + c) {
                         // X: True
                         z = Point::new(a / 2.0, (a * rad.sin()) / (2.0 * rad.cos()));
                         if rad >= PI * 2.0 - c || rad <= c {
                             z = -z;
                         }
-                    }
-                    else {
+                    } else {
                         // -: False
                         z = Point::new((b * rad.cos()) / (2.0 * rad.sin()), b / 2.0);
-                        if rad >= PI+c || rad <= PI * 2.0 - c {
+                        if rad >= PI + c || rad <= PI * 2.0 - c {
                             z = -z;
                         }
                     }
@@ -675,10 +663,125 @@ fn brush_to_source<'a>(brush: &Brush, frame: Rectangle) -> raqote::Source<'a> {
                         raqote::Gradient { stops: g_stops },
                         raqote::Point::new(start.x() as f32, start.y() as f32),
                         raqote::Point::new(end.x() as f32, end.y() as f32),
-                        raqote::Spread::Repeat,
+                        raqote::Spread::Pad,
+                    )
+                }
+                GradientCoords::Direction(d) => {
+                    let width = frame.width();
+                    let height = frame.height();
+                    let (mut start, mut end) = start_and_end_from_direction(*d, width, height);
+                    start = start + frame.position();
+                    end = end + frame.position();
+                    raqote::Source::new_linear_gradient(
+                        raqote::Gradient { stops: g_stops },
+                        raqote::Point::new(start.x() as f32, start.y() as f32),
+                        raqote::Point::new(end.x() as f32, end.y() as f32),
+                        raqote::Spread::Pad,
                     )
                 }
             }
         }
     }
+}
+
+fn start_and_end_from_direction(d: Direction, width: f64, height: f64) -> (Point, Point) {
+    let (start, end);
+    let mid_width = width / 2.0;
+    let mid_height = height / 2.0;
+    match d {
+        Direction::ToTop => {
+            start = Point::new(mid_width, height);
+            end = Point::new(mid_width, 0.0);
+        }
+        Direction::ToTopRight => {
+            start = Point::new(0.0, height);
+            end = Point::new(width, 0.0);
+        }
+        Direction::ToRight => {
+            start = Point::new(0.0, mid_height);
+            end = Point::new(width, mid_height);
+        }
+        Direction::ToBottomRight => {
+            start = Point::new(0.0, 0.0);
+            end = Point::new(width, height);
+        }
+        Direction::ToBottom => {
+            start = Point::new(mid_width, 0.0);
+            end = Point::new(mid_width, height);
+        }
+        Direction::ToBottomLeft => {
+            start = Point::new(width, 0.0);
+            end = Point::new(0.0, height);
+        }
+        Direction::ToLeft => {
+            start = Point::new(width, mid_height);
+            end = Point::new(0.0, mid_height);
+        }
+        Direction::ToTopLeft => {
+            start = Point::new(width, height);
+            end = Point::new(0.0, 0.0);
+        }
+    }
+    (start, end)
+}
+
+fn build_gradient(stops: &[GradientStop]) -> Vec<raqote::GradientStop> {
+    let mut g_stops = Vec::with_capacity(stops.len());
+    let mut cursor = 0;
+    dbg!(&stops);
+    while cursor < stops.len() {
+        dbg!((cursor, &stops[cursor]));
+        match stops[cursor].kind {
+            GradientStopKind::Interpolated => {
+                let mut second_cursor = cursor;
+                let mut end = None;
+                while second_cursor < stops.len() {
+                    match stops[second_cursor].kind {
+                        GradientStopKind::Fixed(e) => {
+                            end = Some(e);
+                            break;
+                        }
+                        GradientStopKind::Interpolated => {}
+                    }
+                    second_cursor += 1;
+                }
+                let from_pos = match cursor == 0 {
+                    true => 0.0,
+                    false => match stops[cursor - 1].kind {
+                        GradientStopKind::Fixed(e) => e,
+                        GradientStopKind::Interpolated => unreachable!(),
+                    },
+                };
+                let mut count = (second_cursor - cursor) as f64;
+                let to_pos = match end {
+                    Some(tp) => tp,
+                    None => {
+                        count -= 1.0;
+                        1.0
+                    }
+                };
+                for i in cursor..second_cursor {
+                    let p = from_pos + (to_pos - from_pos) / count * (i as f64);
+                    let c = stops[i].color;
+                    g_stops.push(raqote::GradientStop {
+                        position: (p as f32),
+                        color: raqote::Color::new(c.a(), c.r(), c.g(), c.b()),
+                    });
+                }
+                if end.is_none() {
+                    break;
+                }
+                cursor = second_cursor;
+            }
+            GradientStopKind::Fixed(pos) => {
+                let c = stops[cursor].color;
+                g_stops.push(raqote::GradientStop {
+                    position: (pos as f32),
+                    color: raqote::Color::new(c.a(), c.r(), c.g(), c.b()),
+                });
+                cursor += 1;
+            }
+        }
+    }
+    g_stops
 }

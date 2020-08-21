@@ -105,7 +105,7 @@ impl Expression {
                 angle = (angle % (f64::consts::PI * 2.0)).abs();
                 Some(angle)
             }
-/*            Expression::Other(label) => match &label[..] {
+            /*            Expression::Other(label) => match &label[..] {
                 "to top" => Some(f64::consts::PI * 2.0 * 0.0),
                 "to top right" => Some(f64::consts::PI * 2.0 * 0.125),
                 "to right" => Some(f64::consts::PI * 2.0 * 0.25),
@@ -120,10 +120,27 @@ impl Expression {
         }
     }
 
+    pub fn direction(&self) -> Option<Direction> {
+        match self {
+            Expression::Other(label) => match &label[..] {
+                "to top" => Some(Direction::ToTop),
+                "to top right" => Some(Direction::ToTopRight),
+                "to right" => Some(Direction::ToRight),
+                "to bottom right" => Some(Direction::ToBottomRight),
+                "to bottom" => Some(Direction::ToBottom),
+                "to bottom left" => Some(Direction::ToBottomLeft),
+                "to left" => Some(Direction::ToLeft),
+                "to top left" => Some(Direction::ToTopLeft),
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+
     pub fn gradient_stop(&self) -> Option<GradientStop> {
         if let Some(color) = self.color() {
             return Some(GradientStop {
-                position: f64::NAN,
+                kind: GradientStopKind::Interpolated,
                 color,
             });
         }
@@ -133,12 +150,19 @@ impl Expression {
                     Some(color) => color,
                     None => return None,
                 };
-                let mut position = match v[1].expression() {
-                    Some(Expression::Number(number, p)) if p == "%" => (*number).into(),
+                let (number, m) = match v[1].expression() {
+                    Some(Expression::Number(n, m)) => (n, m),
                     _ => return None,
                 };
-                position /= 100.0;
-                Some(GradientStop { position, color })
+                let kind = match &m[..] {
+                    "%" => {
+                        let mut o: f64 = (*number).into();
+                        o /= 100.0;
+                        GradientStopKind::Fixed(o)
+                    }
+                    _ => return None,
+                };
+                Some(GradientStop { kind, color })
             }
             _ => None,
         }
@@ -155,9 +179,13 @@ impl Expression {
         match &name[..] {
             "linear-gradient" if !args.is_empty() => {
                 let mut i = 0;
-                let mut angle = 0.0;
-                if let Some(defined_angle) = args[0].angle() {
-                    angle = defined_angle;
+                let mut coords = GradientCoords::Angle { radians: 0.0 };
+                if let Some(direction) = args[0].direction() {
+                    coords = GradientCoords::Direction(direction);
+                    i += 1;
+                }
+                else if let Some(radians) = args[0].angle() {
+                    coords = GradientCoords::Angle { radians };
                     i += 1;
                 }
                 let mut stops = Vec::new();
@@ -173,51 +201,10 @@ impl Expression {
                 } else if stops.len() == 1 {
                     return Some(Brush::SolidColor(stops[0].color));
                 }
-                let mut cursor = 0;
-                while cursor < stops.len() {
-                    if stops[cursor].position.is_nan() {
-                        let mut second_cursor = cursor;
-                        // this is the same second_cursor != stops.len(), but I want to make this explicit
-                        let mut has_end = false;
-                        while second_cursor < stops.len() {
-                            if !stops[second_cursor].position.is_nan() {
-                                has_end = true;
-                                break;
-                            }
-                            second_cursor += 1;
-                        }
-                        let from_pos = match cursor == 0 {
-                            true => 0.0,
-                            false => {
-                                debug_assert!(!stops[cursor-1].position.is_nan());
-                                stops[cursor-1].position
-                            }
-                        };
-                        let to_pos = match has_end {
-                            true => {
-                                debug_assert!(!stops[second_cursor].position.is_nan());
-                                stops[second_cursor].position
-                            },
-                            false => 1.0
-                        };
-                        let mut count = (second_cursor - cursor) as f64;
-                        if !has_end {
-                            count -= 1.0;
-                        }
-                        for i in cursor..second_cursor {
-                            stops[i].position = from_pos + (to_pos - from_pos) / count * (i as f64);
-                        }
-                        cursor = second_cursor;
-                    }
-                    else {
-                        cursor += 1;
-                    }
-                }
-                dbg!(&stops);
                 Some(Brush::Gradient(
                     GradientKind::Linear,
                     Gradient {
-                        coords: GradientCoords::Angle { radians: angle },
+                        coords,
                         stops,
                     },
                 ))
@@ -242,46 +229,7 @@ impl From<String> for Expression {
 impl From<&str> for Expression {
     fn from(s: &str) -> Expression {
         let mut s = s.chars().peekable();
-        let mut v = Vec::new();
-        loop {
-            if let Some(c) = s.peek() {
-                let c = *c;
-                if c.is_whitespace() {
-                    // Ignore whitespaces
-                    s.next().unwrap();
-                    continue;
-                } else if c == '+' {
-                    v.push(ExprOrOp::Operator(Operator::Add));
-                    s.next().unwrap();
-                    continue;
-                } else if c == '-' {
-                    v.push(ExprOrOp::Operator(Operator::Sub));
-                    s.next().unwrap();
-                    continue;
-                } else if c == '*' {
-                    v.push(ExprOrOp::Operator(Operator::Mul));
-                    s.next().unwrap();
-                    continue;
-                } else if c == '/' {
-                    v.push(ExprOrOp::Operator(Operator::Div));
-                    s.next().unwrap();
-                    continue;
-                }
-            } else {
-                break;
-            }
-            v.push(ExprOrOp::Expression(parse_expression(&mut s)));
-        }
-        if v.is_empty() {
-            Self::default()
-        } else if v.len() == 1 {
-            match v[0] {
-                ExprOrOp::Expression(ref e) => e.to_owned(),
-                ExprOrOp::Operator(_) => Expression::Complex(v),
-            }
-        } else {
-            Expression::Complex(v)
-        }
+        parse_expression_with_complex(&mut s).unwrap_or_default()
     }
 }
 
@@ -294,7 +242,53 @@ impl Into<Number> for Expression {
     }
 }
 
-fn parse_expression(chrs: &mut Peekable<Chars>) -> Expression {
+fn parse_expression_with_complex(chrs: &mut Peekable<Chars>) -> Option<Expression> {
+    let mut v = Vec::new();
+    loop {
+        if let Some(c) = chrs.peek() {
+            let c = *c;
+            if c == ',' || c == ')' {
+                break;
+            } else if c.is_whitespace() {
+                // Ignore whitespaces
+                chrs.next().unwrap();
+                continue;
+            } else if c == '+' {
+                v.push(ExprOrOp::Operator(Operator::Add));
+                chrs.next().unwrap();
+                continue;
+            } else if c == '-' {
+                v.push(ExprOrOp::Operator(Operator::Sub));
+                chrs.next().unwrap();
+                continue;
+            } else if c == '*' {
+                v.push(ExprOrOp::Operator(Operator::Mul));
+                chrs.next().unwrap();
+                continue;
+            } else if c == '/' {
+                v.push(ExprOrOp::Operator(Operator::Div));
+                chrs.next().unwrap();
+                continue;
+            }
+        } else {
+            break;
+        }
+        let expr = parse_expression(chrs)?;
+        v.push(ExprOrOp::Expression(expr));
+    }
+    if v.is_empty() {
+        None
+    } else if v.len() == 1 {
+        Some(match v[0] {
+            ExprOrOp::Expression(ref e) => e.to_owned(),
+            ExprOrOp::Operator(_) => Expression::Complex(v),
+        })
+    } else {
+        Some(Expression::Complex(v))
+    }
+}
+
+fn parse_expression(chrs: &mut Peekable<Chars>) -> Option<Expression> {
     let mut text = String::new();
     let method;
     loop {
@@ -305,10 +299,12 @@ fn parse_expression(chrs: &mut Peekable<Chars>) -> Expression {
                 break;
             }
             Some(c)
-                if *c == ',' || *c == ')'
+                if *c == ','
+                    || *c == ')'
                     || (c.is_whitespace()
-                        && !text
-                            .starts_with(|x: char| x == '#' || x.is_ascii_digit() || x == '.')) =>
+                        && text.starts_with(|x: char| {
+                            x == '#' || x.is_ascii_digit() || x == '.' || x == '-'
+                        })) =>
             {
                 method = false;
                 break;
@@ -323,6 +319,7 @@ fn parse_expression(chrs: &mut Peekable<Chars>) -> Expression {
             }
         }
     }
+    debug_assert!(!text.is_empty());
     if method {
         let mut args = Vec::new();
         loop {
@@ -335,31 +332,32 @@ fn parse_expression(chrs: &mut Peekable<Chars>) -> Expression {
                     break;
                 }
                 _ => {
-                    args.push(parse_expression(chrs));
+                    args.push(parse_expression_with_complex(chrs)?);
                 }
             }
         }
-        Expression::Method(text, args)
+        Some(Expression::Method(text, args))
     } else {
         if text.starts_with('#') {
-            return Expression::Color(Color::from(text));
-        } else if text.starts_with(|x: char| x.is_ascii_digit() || x == '.') {
-            if let Some(mut ofs) = text.rfind(|x: char| x.is_ascii_digit() || x == '.') {
-                ofs += 1; // Moves from before last digit to after last digit position
+            return Some(Expression::Color(Color::from(text)));
+        } else if text.starts_with(|x: char| x.is_ascii_digit() || x == '.' || x == '-') {
+            if let Some(mut ofs) = text.rfind(|x: char| x.is_ascii_digit() || x == '.' || x == '-')
+            {
+                ofs += 1; // Moves from before last position digit to after last digit position
                 if text[..ofs]
                     .find(|x| x == '.' || x == 'e' || x == 'E')
                     .is_some()
                 {
                     if let Ok(v) = lexical_core::parse(text[..ofs].as_bytes()) {
-                        return Expression::Number(Number::Float(v), text[ofs..].to_owned());
+                        return Some(Expression::Number(Number::Float(v), text[ofs..].to_owned()));
                     }
                 } else {
                     if let Ok(v) = lexical_core::parse(text[..ofs].as_bytes()) {
-                        return Expression::Number(Number::Real(v), text[ofs..].to_owned());
+                        return Some(Expression::Number(Number::Real(v), text[ofs..].to_owned()));
                     }
                 }
             }
         }
-        Expression::Other(text)
+        Some(Expression::Other(text))
     }
 }
