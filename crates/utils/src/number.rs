@@ -1,3 +1,5 @@
+use std::ops::Neg;
+
 #[derive(Debug, PartialOrd, PartialEq, Copy, Clone)]
 pub enum Number {
     Real(i64),
@@ -7,6 +9,17 @@ pub enum Number {
 impl Default for Number {
     fn default() -> Self {
         Self::Real(0)
+    }
+}
+
+impl Neg for Number {
+    type Output = Number;
+    
+    fn neg(self) -> Self::Output {
+        match self {
+            Number::Float(n) => Number::Float(-n),
+            Number::Real(n) => Number::Real(-n),
+        }
     }
 }
 

@@ -33,17 +33,15 @@ Theme (
                 "foreground": "$LINK_WATER",
                 "icon_brush": "$LINK_WATER",
                 //"background": "$LYNCH",
-                "background": "linear-gradient(to bottom, #0575e6, #021b79)",
+                "background": "linear-gradient(0deg, goldtips 0%, rgb(255,242,15) 100%)",
                 "border_radius": 4,
             }, 
             states: {
                 "pressed": {
-                    //"background": "$BLUE_BAYOUX",
-                    "background": "linear-gradient(to top, #0575e6, #021b79)",
+                    "background": "$BLUE_BAYOUX",
                 },
                 "selected": {
-                    //"background": "$BLUE_BAYOUX",
-                    "background": "linear-gradient(to top, #0575e6, #ffffff, #021b79)",
+                    "background": "$BLUE_BAYOUX",
                 },
                 "disabled": {
                     "foreground": "$BRIGHT_GRAY",

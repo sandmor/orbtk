@@ -41,51 +41,51 @@ impl Expression {
         match self {
             Expression::Color(color) => Some(*color),
             Expression::Method(name, args) => {
-                for arg in args.iter() {
-                    match arg {
-                        Expression::Number(_, t) if t.is_empty() => {}
+                let mut values = [0.0f64; 4];
+                for (i, arg) in args.iter().enumerate() {
+                    if i > 3 {
+                        return None;
+                    }
+                    let (mut v, p): (f64, bool) = match arg {
+                        Expression::Number(v, u) if u.is_empty() => ((*v).into(), false),
+                        Expression::Number(v, u) if u == "%" => ((*v).into(), true),
                         _ => {
                             return None;
                         }
                     };
+                    if name == "rgb" || name == "rgba" {
+                        if p {
+                            v = v * 100.0 / 255.0;
+                        } else if v.floor() == 0.0 {
+                            v = 255.0 * v.fract();
+                        }
+                    } else if i != 0 && v > 1.0 {
+                        v /= 100.0;
+                    }
+                    values[i] = v;
                 }
-                match &name[..] {
-                    "rgb" if args.len() == 3 => Some(Color::rgb(
-                        args[0].number().unwrap().into(),
-                        args[1].number().unwrap().into(),
-                        args[2].number().unwrap().into(),
-                    )),
-                    "hsv" if args.len() == 3 => Some(Color::hsv(
-                        args[0].number().unwrap().into(),
-                        args[1].number().unwrap().into(),
-                        args[2].number().unwrap().into(),
-                    )),
-                    "hsl" if args.len() == 3 => Some(Color::hsl(
-                        args[0].number().unwrap().into(),
-                        args[1].number().unwrap().into(),
-                        args[2].number().unwrap().into(),
-                    )),
-                    "rgba" if args.len() == 4 => Some(Color::rgba(
-                        args[0].number().unwrap().into(),
-                        args[1].number().unwrap().into(),
-                        args[2].number().unwrap().into(),
-                        args[3].number().unwrap().into(),
-                    )),
-                    "hsva" if args.len() == 4 => Some(Color::hsva(
-                        args[0].number().unwrap().into(),
-                        args[1].number().unwrap().into(),
-                        args[2].number().unwrap().into(),
-                        args[3].number().unwrap().into(),
-                    )),
-                    "hsla" if args.len() == 4 => Some(Color::hsla(
-                        args[0].number().unwrap().into(),
-                        args[1].number().unwrap().into(),
-                        args[2].number().unwrap().into(),
-                        args[3].number().unwrap().into(),
-                    )),
-                    _ => None,
+                if args.len() == 3 {
+                    Some(match &name[..] {
+                        "rgb" => Color::rgb(values[0] as u8, values[1] as u8, values[2] as u8),
+                        "hsv" | "hsb" => Color::hsv(values[0], values[1], values[2]),
+                        "hsl" => Color::hsl(values[0], values[1], values[2]),
+                        _ => return None,
+                    })
+                } else {
+                    Some(match &name[..] {
+                        "rgba" => Color::rgba(
+                            values[0] as u8,
+                            values[1] as u8,
+                            values[2] as u8,
+                            values[3] as u8,
+                        ),
+                        "hsva" | "hsba" => Color::hsva(values[0], values[1], values[2], values[3]),
+                        "hsla" => Color::hsla(values[0], values[1], values[2], values[3]),
+                        _ => return None,
+                    })
                 }
             }
+            Expression::Other(s) => color_from_name(s),
             _ => None,
         }
     }
@@ -102,20 +102,13 @@ impl Expression {
                         num * f64::consts::PI / 180.0
                     }
                 };
-                angle = (angle % (f64::consts::PI * 2.0)).abs();
+                if angle.is_sign_negative() {
+                    angle = (f64::consts::PI * 2.0) - -angle;
+                } else {
+                    angle = angle % (f64::consts::PI * 2.0);
+                }
                 Some(angle)
             }
-            /*            Expression::Other(label) => match &label[..] {
-                "to top" => Some(f64::consts::PI * 2.0 * 0.0),
-                "to top right" => Some(f64::consts::PI * 2.0 * 0.125),
-                "to right" => Some(f64::consts::PI * 2.0 * 0.25),
-                "to bottom right" => Some(f64::consts::PI * 2.0 * 0.375),
-                "to bottom" => Some(f64::consts::PI * 2.0 * 0.5),
-                "to bottom left" => Some(f64::consts::PI * 2.0 * 0.625),
-                "to left" => Some(f64::consts::PI * 2.0 * 0.75),
-                "to top left" => Some(f64::consts::PI * 2.0 * 0.875),
-                _ => None,
-            },*/
             _ => None,
         }
     }
@@ -138,6 +131,7 @@ impl Expression {
     }
 
     pub fn gradient_stop(&self) -> Option<GradientStop> {
+        dbg!(&self);
         if let Some(color) = self.color() {
             return Some(GradientStop {
                 kind: GradientStopKind::Interpolated,
@@ -160,6 +154,10 @@ impl Expression {
                         o /= 100.0;
                         GradientStopKind::Fixed(o)
                     }
+                    "px" => {
+                        let o: f64 = (*number).into();
+                        GradientStopKind::Pixels(o)
+                    }
                     _ => return None,
                 };
                 Some(GradientStop { kind, color })
@@ -168,49 +166,57 @@ impl Expression {
         }
     }
 
-    pub fn brush(&self) -> Option<Brush> {
-        if let Some(color) = self.color() {
-            return Some(Brush::from(color));
-        }
+    pub fn css_gradient(&self) -> Option<Gradient> {
         let (name, args) = match self {
             Expression::Method(name, args) => (name, args),
             _ => return None,
         };
-        match &name[..] {
-            "linear-gradient" if !args.is_empty() => {
-                let mut i = 0;
-                let mut coords = GradientCoords::Angle { radians: 0.0 };
-                if let Some(direction) = args[0].direction() {
-                    coords = GradientCoords::Direction(direction);
-                    i += 1;
-                }
-                else if let Some(radians) = args[0].angle() {
-                    coords = GradientCoords::Angle { radians };
-                    i += 1;
-                }
-                let mut stops = Vec::new();
-                for i in i..args.len() {
-                    let stop = match args[i].gradient_stop() {
-                        Some(stop) => stop,
-                        None => continue,
-                    };
-                    stops.push(stop);
-                }
-                if stops.is_empty() {
-                    return None;
-                } else if stops.len() == 1 {
-                    return Some(Brush::SolidColor(stops[0].color));
-                }
-                Some(Brush::Gradient(
-                    GradientKind::Linear,
-                    Gradient {
-                        coords,
-                        stops,
-                    },
-                ))
-            }
-            _ => None,
+        if args.is_empty() {
+            return None;
         }
+        let (kind, repeat) = match &name[..] {
+            "repeating-linear-gradient" => (GradientKind::Linear, true),
+            "linear-gradient" => (GradientKind::Linear, false),
+            _ => {
+                return None;
+            }
+        };
+        let mut i = 0;
+        let mut coords = GradientCoords::Angle { radians: 0.0 };
+        if let Some(direction) = args[0].direction() {
+            coords = GradientCoords::Direction(direction);
+            i += 1;
+        } else if let Some(radians) = args[0].angle() {
+            coords = GradientCoords::Angle { radians };
+            i += 1;
+        }
+        let mut stops = Vec::new();
+        for i in i..args.len() {
+            let stop = match args[i].gradient_stop() {
+                Some(stop) => stop,
+                None => continue,
+            };
+            stops.push(stop);
+        }
+        if stops.is_empty() {
+            return None;
+        }
+        Some(Gradient {
+            kind,
+            coords,
+            stops,
+            repeat,
+        })
+    }
+
+    pub fn brush(&self) -> Option<Brush> {
+        if let Some(color) = self.color() {
+            return Some(Brush::from(color));
+        }
+        if let Some(g) = self.css_gradient() {
+            return Some(Brush::from(g));
+        }
+        None
     }
 }
 
@@ -273,7 +279,33 @@ fn parse_expression_with_complex(chrs: &mut Peekable<Chars>) -> Option<Expressio
         } else {
             break;
         }
-        let expr = parse_expression(chrs)?;
+        let mut expr = parse_expression(chrs)?;
+        let mut reinterpret_op = None;
+        if let Some(ExprOrOp::Operator(op)) = v.last().cloned() {
+            if op == Operator::Add || op == Operator::Sub {
+                reinterpret_op = Some(op == Operator::Add);
+                if v.len() >= 2 {
+                    match v[v.len() - 2] {
+                        ExprOrOp::Expression(Expression::Number(_, _)) => {
+                            // Mathematic expression
+                            reinterpret_op = None;
+                        }
+                        _ => {}
+                    };
+                }
+            }
+        }
+        if let Some(plus) = reinterpret_op {
+            match expr {
+                Expression::Number(ref mut n, _) => {
+                    v.pop();
+                    if !plus {
+                        *n = -(*n);
+                    }
+                }
+                _ => {}
+            }
+        }
         v.push(ExprOrOp::Expression(expr));
     }
     if v.is_empty() {
@@ -298,14 +330,7 @@ fn parse_expression(chrs: &mut Peekable<Chars>) -> Option<Expression> {
                 method = true;
                 break;
             }
-            Some(c)
-                if *c == ','
-                    || *c == ')'
-                    || (c.is_whitespace()
-                        && text.starts_with(|x: char| {
-                            x == '#' || x.is_ascii_digit() || x == '.' || x == '-'
-                        })) =>
-            {
+            Some(c) if *c == ',' || *c == ')' || (c.is_whitespace() && text != "to") => {
                 method = false;
                 break;
             }

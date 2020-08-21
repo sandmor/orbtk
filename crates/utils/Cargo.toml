@@ -12,5 +12,10 @@ edition = "2018"
 [dependencies]
 lexical-core = "0.7"
 ron = "0.6"
+phf = { version = "0.8", default-features = false }
 serde = "1.0"
 derive_more = { version = "0.99", default-features = false, features = ["add", "constructor", "from"] }
+
+
+[build-dependencies]
+phf_codegen = { version = "0.8", default-features = false }
