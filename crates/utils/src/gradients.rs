@@ -11,6 +11,7 @@ pub struct GradientStop {
 pub enum GradientStopKind {
     Interpolated,
     Fixed(f64),
+    Pixels(f64),
 }
 
 #[derive(Copy, Clone, PartialEq, Debug)]
@@ -23,11 +24,33 @@ pub enum GradientCoords {
 /// Describes a colorful linear gradient.
 #[derive(Clone, PartialEq, Debug)]
 pub struct Gradient {
+    pub kind: GradientKind,
     pub coords: GradientCoords,
     pub stops: Vec<GradientStop>,
+    pub repeat: bool,
 }
 
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub enum GradientKind {
     Linear,
+}
+
+impl Default for Gradient {
+    fn default() -> Self {
+        Self {
+            kind: GradientKind::Linear,
+            coords: GradientCoords::Angle { radians: 0.0 },
+            stops: vec![
+                GradientStop {
+                    kind: GradientStopKind::Interpolated,
+                    color: Color::rgb(0, 0, 0),
+                },
+                GradientStop {
+                    kind: GradientStopKind::Interpolated,
+                    color: Color::rgb(255, 255, 255),
+                },
+            ],
+            repeat: false,
+        }
+    }
 }

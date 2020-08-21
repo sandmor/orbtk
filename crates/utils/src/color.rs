@@ -1,3 +1,5 @@
+include!(concat!(env!("OUT_DIR"), "/colors.rs"));
+
 #[cfg(not(feature = "no_std"))]
 use std::fmt;
 
@@ -35,7 +37,6 @@ impl Color {
 
     /// Create a new color from HSV(0.0-360.0, 0.0-1.0, 0.0-1.0) and alpha values(0.0-1.0)
     pub fn hsva(mut h: f64, mut s: f64, mut v: f64, a: f64) -> Self {
-        dbg!((h, s, v));
         h = h % 360.0;
         s = s.max(0.0).min(1.0);
         v = v.max(0.0).min(1.0);
@@ -53,10 +54,15 @@ impl Color {
             3 => (p, q, v),
             4 => (t, p, v),
             5 => (v, p, q),
-            _ => unreachable!()
+            _ => unreachable!(),
         };
         dbg!((p, q, t));
-        Self::rgba((r * 255.0) as u8, (g * 255.0) as u8, (b * 255.0) as u8, (a * 255.0) as u8)
+        Self::rgba(
+            (r * 255.0) as u8,
+            (g * 255.0) as u8,
+            (b * 255.0) as u8,
+            (a * 255.0) as u8,
+        )
     }
 
     /// Create a new color from HSL(0.0-360.0, 0.0-1.0, 0.0-1.0) and alpha values(0.0-1.0)
@@ -75,13 +81,18 @@ impl Color {
             3 => (0.0, second_component, chroma),
             4 => (second_component, 0.0, chroma),
             5 => (chroma, 0.0, second_component),
-            _ => unreachable!()
+            _ => unreachable!(),
         };
         let adjustment = l - chroma / 2.0;
         r += adjustment;
         g += adjustment;
         b += adjustment;
-        Self::rgba((r.min(1.0) * 255.0) as u8, (g.min(1.0) * 255.0) as u8, (b.min(1.0) * 255.0) as u8, (a * 255.0) as u8)
+        Self::rgba(
+            (r.min(1.0) * 255.0) as u8,
+            (g.min(1.0) * 255.0) as u8,
+            (b.min(1.0) * 255.0) as u8,
+            (a * 255.0) as u8,
+        )
     }
 
     /// Get the r value
@@ -135,12 +146,24 @@ impl ToString for Color {
 
 impl From<&str> for Color {
     fn from(s: &str) -> Color {
-        if s == "transparent" {
-            return Color::rgba(0, 0, 0, 0);
-        }
-
         let clean_hex = s.trim_start_matches('#');
         match clean_hex.len() {
+            3 | 4 => {
+                let d = match u32::from_str_radix(&clean_hex, 16) {
+                    Ok(x) => x,
+                    Err(_) => 0,
+                };
+
+                let b = (d & 0xF) << 4;
+                let g = ((d >> 4) & 0xF) << 4;
+                let r = ((d >> 8) & 0xF) << 4;
+                let a = match clean_hex.len() == 4 {
+                    true => ((d >> 12) & 0xF) << 4,
+                    false => 0xFF,
+                };
+
+                Color::rgba(r as u8, g as u8, b as u8, a as u8)
+            }
             6 | 8 => {
                 let mut x = match u32::from_str_radix(&clean_hex, 16) {
                     Ok(x) => x,
@@ -176,6 +199,10 @@ impl fmt::Debug for Color {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         write!(f, "{:#010X}", { self.data })
     }
+}
+
+pub fn color_from_name(id: &str) -> Option<Color> {
+    COLORS.get(id).cloned()
 }
 
 #[cfg(test)]
