@@ -339,9 +339,9 @@ Theme (
         ),
         "progress_bar_indicator": (
             properties: {
-                "background": "$GOLDEN_DREAM",
-                "border_radius": 1,
-                "height": 12,
+                "background": "$GOLDEN_PROGRESS",
+                "border_radius": 0,
+                "height": 24,
                 "width": 0,
             }
         ),
@@ -356,7 +356,7 @@ Theme (
             base: "base",
             properties: {
                 "height": 32,
-                "font_sze": "$FONT_SIZE_12",
+                "font_size": "$FONT_SIZE_12",
                 "foreground": "$BRIGHT_GRAY",
                 "background": "$ALTO",
                 "padding_left": 8,
@@ -365,7 +365,7 @@ Theme (
             },
             states: {
                 "selected": {
-                    "background": "$ATHS_SPECIAL"
+                    "background": "linen"
                 }
             }
         ),

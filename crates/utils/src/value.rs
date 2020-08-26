@@ -1,4 +1,4 @@
-use crate::Expression;
+use crate::Property;
 use serde::de::DeserializeOwned;
 /// Wraps a ron value and is used to support conversion to different types.
 pub struct Value(pub ron::Value);
@@ -16,10 +16,10 @@ impl Value {
         T::default()
     }
 
-    pub fn expr(&self) -> Expression {
+    pub fn property(&self) -> Property {
         match &self.0 {
-            ron::Value::String(s) => Expression::from(&s[..]),
-            _ => Expression::default(),
+            ron::Value::String(s) => Property::from(&s[..]),
+            _ => Property::default(),
         }
     }
 }

@@ -4,7 +4,7 @@ include!(concat!(env!("OUT_DIR"), "/colors.rs"));
 use std::fmt;
 
 /// A r g b a color.
-#[derive(Copy, Clone, Default)]
+#[derive(Copy, Clone, PartialOrd, Default)]
 #[repr(packed)]
 pub struct Color {
     pub data: u32,
@@ -154,13 +154,17 @@ impl From<&str> for Color {
                     Err(_) => 0,
                 };
 
-                let b = (d & 0xF) << 4;
-                let g = ((d >> 4) & 0xF) << 4;
-                let r = ((d >> 8) & 0xF) << 4;
-                let a = match clean_hex.len() == 4 {
+                let mut b = (d & 0xF) << 4;
+                let mut g = ((d >> 4) & 0xF) << 4;
+                let mut r = ((d >> 8) & 0xF) << 4;
+                let mut a = match clean_hex.len() == 4 {
                     true => ((d >> 12) & 0xF) << 4,
-                    false => 0xFF,
+                    false => 0xF,
                 };
+                r |= r >> 4;
+                g |= g >> 4;
+                b |= b >> 4;
+                a |= a >> 4;
 
                 Color::rgba(r as u8, g as u8, b as u8, a as u8)
             }

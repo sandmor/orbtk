@@ -29,9 +29,12 @@ fn main() -> Result<(), Box<dyn Error>> {
                     Err(_) => 0,
                 };
 
-                let r = (d & 0xF) << 4;
-                let g = ((d >> 4) & 0xF) << 4;
-                let b = ((d >> 8) & 0xF) << 4;
+                let mut r = (d & 0xF) << 4;
+                let mut g = ((d >> 4) & 0xF) << 4;
+                let mut b = ((d >> 8) & 0xF) << 4;
+                r |= r >> 4;
+                g |= g >> 4;
+                b |= b >> 4;
 
                 format!("Color::rgb({}, {}, {})", r, g, b)
             }

@@ -32,8 +32,7 @@ Theme (
                 "height": 36,
                 "foreground": "$LINK_WATER",
                 "icon_brush": "$LINK_WATER",
-                //"background": "$LYNCH",
-                "background": "linear-gradient(0deg, goldtips 0%, rgb(255,242,15) 100%)",
+                "background": "$LYNCH",
                 "border_radius": 4,
             }, 
             states: {
@@ -41,9 +40,10 @@ Theme (
                     "background": "$BLUE_BAYOUX",
                 },
                 "selected": {
-                    "background": "$BLUE_BAYOUX",
+                    "background": "linear-gradient(to top, cadetblue, bluebayoux)",
                 },
                 "disabled": {
+                    "background": "$ROLLING_STONE",
                     "foreground": "$BRIGHT_GRAY",
                     "icon_brush": "$BRIGHT_GRAY",
                 },
@@ -235,11 +235,11 @@ Theme (
                 "width": 24,
                 "height": 24,
                 "border_radius": 12,
-                "background": "$LYNCH",
+                "background": "radial-gradient(cadetblue, lynch)",
             },
             states: {
                 "pressed": {
-                    "background": "$GOLDEN_DREAM",
+                    "background": "radial-gradient(goldenfizz, goldendream)",
                 },
             },
         ),
@@ -344,15 +344,15 @@ Theme (
                 "border_color": "$SILVER",
                 "border_radius": 4,
                 "border_width": 1,
-                "height": 16,
+                "height": 28,
                 "padding": 2,
              },
         ),
         "progress_bar_indicator": (
             properties: {
-                "background": "$GOLDEN_DREAM",
-                "border_radius": 1,
-                "height": 12,
+                "background": "linear-gradient(to top, rgb(242, 190, 12) 7%, rgb(255,255,128), rgb(255,242,21) 20%, rgb(255,255,80) 70%, rgb(200, 180, 2) 70%)",
+                "border_radius": 0,
+                "height": 24,
                 "width": 0,
             }
         ),
@@ -367,7 +367,7 @@ Theme (
             base: "base",
             properties: {
                 "height": 32,
-                "font_sze": "$FONT_SIZE_12",
+                "font_size": "$FONT_SIZE_12",
                 "foreground": "$WHITE",
                 "background": "$FIORD",
                 "padding_left": 8,

@@ -1,3 +1,4 @@
+// NOTE: Some "$COLOR" entries currently are gradients
 Theme (
     styles: {
         "base": (
@@ -33,6 +34,7 @@ Theme (
                 "foreground": "$BRIGHT_GRAY",
                 "icon_brush": "$BRIGHT_GRAY",
                 "background": "$ALTO",
+                //"background": "radial-gradient(red, blue)",
                 "border_radius": 4,
             }, 
             states: {
@@ -323,15 +325,15 @@ Theme (
                 "border_color": "$SILVER_CHALICE",
                 "border_radius": 4,
                 "border_width": 1,
-                "height": 16,
+                "height": 28,
                 "padding": 2,
              },
         ),
         "progress_bar_indicator": (
             properties: {
-                "background": "$GOLDEN_DREAM",
-                "border_radius": 1,
-                "height": 12,
+                "background": "linear-gradient(to top, rgb(242, 190, 12) 7%, rgb(255,255,128), rgb(255,242,21) 20%, rgb(255,255,80) 70%, rgb(200, 180, 2) 70%)",
+                "border_radius": 0,
+                "height": 24,
                 "width": 0,
             }
         ),
@@ -346,7 +348,7 @@ Theme (
             base: "base",
             properties: {
                 "height": 32,
-                "font_sze": "$FONT_SIZE_12",
+                "font_size": "$FONT_SIZE_12",
                 "foreground": "$BRIGHT_GRAY",
                 "background": "$ALTO",
                 "padding_left": 8,
@@ -355,7 +357,7 @@ Theme (
             },
             states: {
                 "selected": {
-                    "background": "$ATHS_SPECIAL"
+                    "background": "linen"
                 }
             }
         ),

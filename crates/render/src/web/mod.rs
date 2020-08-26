@@ -5,20 +5,27 @@ use stdweb::{
 };
 
 // pub use crate::image::Image as InnerImage;
-use crate::{utils::*, FontConfig, PipelineTrait, RenderConfig, RenderTarget, TextMetrics};
+use crate::{utils::*, common::*, FontConfig, PipelineTrait, RenderConfig, RenderTarget, TextMetrics};
 
 pub use self::image::*;
 
 mod image;
+
+#[derive(Debug, Clone)]
+enum SpecialFill {
+    EllipticGradient(RadialGradient, Vec<GradientStop>, bool)
+}
 
 /// The RenderContext2D trait, provides the rendering ctx. It is used for drawing shapes, text, images, and other objects.
 pub struct RenderContext2D {
     canvas_render_context_2_d: CanvasRenderingContext2d,
     font_config: FontConfig,
     config: RenderConfig,
-    saved_config: Option<RenderConfig>,
     export_data: Vec<u32>,
     background: Color,
+    special_fill: Option<SpecialFill>,
+    path_rect: PathRectTrack,
+    saved_state: Option<(RenderConfig, PathRectTrack, Option<SpecialFill>)>,
 }
 
 impl RenderContext2D {
@@ -39,11 +46,13 @@ impl RenderContext2D {
         ctx.set_text_baseline(stdweb::web::TextBaseline::Middle);
         RenderContext2D {
             config: RenderConfig::default(),
-            saved_config: None,
             canvas_render_context_2_d: ctx,
             font_config: FontConfig::default(),
             export_data,
             background: Color::default(),
+            special_fill: None,
+            path_rect: PathRectTrack::new(),
+            saved_state: None
         }
     }
 
@@ -63,11 +72,13 @@ impl RenderContext2D {
         canvas_render_context_2_d.set_text_baseline(stdweb::web::TextBaseline::Middle);
         RenderContext2D {
             config: RenderConfig::default(),
-            saved_config: None,
             canvas_render_context_2_d,
             font_config: FontConfig::default(),
             export_data,
             background: Color::default(),
+            path_rect: PathRectTrack::new(),
+            special_fill: None,
+            saved_state: None,
         }
     }
 
@@ -76,7 +87,7 @@ impl RenderContext2D {
     /// Draws a filled rectangle whose starting point is at the coordinates {x, y} with the
     /// specified width and height and whose style is determined by the fillStyle attribute.
     pub fn fill_rect(&mut self, x: f64, y: f64, width: f64, height: f64) {
-        self.fill_style(&self.config.fill_style);
+        self.fill_style();
         self.canvas_render_context_2_d
             .fill_rect(x, y, width, height);
     }
@@ -92,7 +103,7 @@ impl RenderContext2D {
 
     /// Draws (fills) a given text at the given (x, y) position.
     pub fn fill_text(&mut self, text: &str, x: f64, y: f64) {
-        self.fill_style(&self.config.fill_style);
+        self.fill_style();
         self.canvas_render_context_2_d
             .set_text_baseline(stdweb::web::TextBaseline::Middle);
         self.canvas_render_context_2_d.fill_text(
@@ -128,8 +139,13 @@ impl RenderContext2D {
 
     /// Fills the current or given path with the current file style.
     pub fn fill(&mut self) {
-        self.fill_style(&self.config.fill_style);
-        self.canvas_render_context_2_d.fill(FillRule::default());
+        self.fill_style();
+        if let Some(fill) = self.special_fill.take() {
+            self.special_fill(fill);
+        }
+        else {
+            self.canvas_render_context_2_d.fill(FillRule::default());
+        }
     }
 
     /// Strokes {outlines} the current or given path with the current stroke style.
@@ -141,40 +157,47 @@ impl RenderContext2D {
     /// Starts a new path by emptying the list of sub-paths. Call this when you want to create a new path.
     pub fn begin_path(&mut self) {
         self.canvas_render_context_2_d.begin_path();
+        self.path_rect = PathRectTrack::new();
     }
 
     /// Attempts to add a straight line from the current point to the start of the current sub-path.
     /// If the shape has already been closed or has only one point, this function does nothing.
     pub fn close_path(&mut self) {
         self.canvas_render_context_2_d.close_path();
+        self.path_rect.close_path();
     }
 
     /// Adds a rectangle to the current path.
     pub fn rect(&mut self, x: f64, y: f64, width: f64, height: f64) {
         self.canvas_render_context_2_d.rect(x, y, width, height);
+        self.path_rect.rect(x,y, width, height);
     }
 
     /// Creates a circular arc centered at (x, y) with a radius of radius. The path starts at startAngle and ends at endAngle.
     pub fn arc(&mut self, x: f64, y: f64, radius: f64, start_angle: f64, end_angle: f64) {
         self.canvas_render_context_2_d
             .arc(x, y, radius, start_angle, end_angle, false);
+        self.path_rect.arc(x, y, radius, start_angle, end_angle);
     }
 
     /// Begins a new sub-path at the point specified by the given {x, y} coordinates.
 
     pub fn move_to(&mut self, x: f64, y: f64) {
         self.canvas_render_context_2_d.move_to(x, y);
+        self.path_rect.insert_point_at(x, y);
     }
 
     /// Adds a straight line to the current sub-path by connecting the sub-path's last point to the specified {x, y} coordinates.
     pub fn line_to(&mut self, x: f64, y: f64) {
         self.canvas_render_context_2_d.line_to(x, y);
+        self.path_rect.insert_point_at(x, y);
     }
 
     /// Adds a quadratic Bézier curve to the current sub-path.
     pub fn quadratic_curve_to(&mut self, cpx: f64, cpy: f64, x: f64, y: f64) {
         self.canvas_render_context_2_d
             .quadratic_curve_to(cpx, cpy, x, y);
+        self.path_rect.quadratic_curve_to(cpx, cpy, x, y);
     }
 
     /// Adds a cubic Bézier curve to the current sub-path.
@@ -183,6 +206,7 @@ impl RenderContext2D {
     pub fn bezier_curve_to(&mut self, cp1x: f64, cp1y: f64, cp2x: f64, cp2y: f64, x: f64, y: f64) {
         self.canvas_render_context_2_d
             .bezier_curve_to(cp1x, cp1y, cp2x, cp2y, x, y);
+        self.path_rect.bezier_curve_to(cp1x, cp1y, cp2x, cp2y, x, y);
     }
 
     // Draw image
@@ -289,6 +313,7 @@ impl RenderContext2D {
     /// Creates a clipping path from the current sub-paths. Everything drawn after clip() is called appears inside the clipping path only.
     pub fn clip(&mut self) {
         self.canvas_render_context_2_d.clip(FillRule::EvenOdd);
+        self.path_rect.clip();
     }
 
     // Line styles
@@ -352,7 +377,7 @@ impl RenderContext2D {
 
     /// Saves the entire state of the canvas by pushing the current state onto a stack.
     pub fn save(&mut self) {
-        self.saved_config = Some(self.config.clone());
+        self.saved_state = Some((self.config.clone(), self.path_rect.clone(), self.special_fill.clone()));
         self.canvas_render_context_2_d.save();
     }
 
@@ -360,11 +385,11 @@ impl RenderContext2D {
     /// If there is no saved state, this method does nothing.
     pub fn restore(&mut self) {
         self.canvas_render_context_2_d.restore();
-        if let Some(config) = &self.saved_config {
-            self.config = config.clone();
+        if let Some((config, path_rect, special_fill)) = self.saved_state.take() {
+            self.config = config;
+            self.path_rect = path_rect;
+            self.special_fill = special_fill;
         }
-
-        self.saved_config = None;
     }
 
     pub fn clear(&mut self, brush: &Brush) {
@@ -455,13 +480,14 @@ impl RenderContext2D {
     }
     pub fn finish(&mut self) {}
 
-    fn fill_style<'a>(&self, brush: &Brush) {
-        match brush {
+    fn fill_style<'a>(&mut self) {
+        self.special_fill = None;
+        match &self.config.fill_style {
             Brush::SolidColor(color) => {
                 self.canvas_render_context_2_d
                     .set_fill_style_color(&color.to_string());
             }
-            Brush::LinearGradient { start, end, stops } => {
+            /*Brush::LinearGradient { start, end, stops } => {
                 let web_gradient = self.canvas_render_context_2_d.create_linear_gradient(
                     start.x(),
                     start.y(),
@@ -477,8 +503,68 @@ impl RenderContext2D {
 
                 self.canvas_render_context_2_d
                     .set_fill_style_gradient(&web_gradient);
-            }
+            }*/
+            /*Brush::Gradient(Gradient {
+                kind: GradientKind::Linear(coords),
+                stops,
+                repeat,
+            }) => {
+                let web_gradient = match coords {
+                    LinearGradientCoords::Ends { start, end } => {
+                        todo!()
+                    }
+                };
+                todo!();
+            }*/
+            Brush::Gradient(Gradient {
+                kind: GradientKind::Radial(params),
+                stops,
+                repeat,
+            }) => {
+                self.special_fill = Some(SpecialFill::EllipticGradient(*params, stops.clone(), *repeat));
+            },
+            u@_ => unimplemented!("{:?}", u)
         }
+    }
+
+    fn special_fill(&mut self, fill: SpecialFill) {
+        let path_rect = match self.path_rect.get_rect() {
+            Some(pr) => pr,
+            None => return
+        };
+        let mut img = Vec::new();
+        let width = path_rect.width() as u32;
+        let height = path_rect.height() as u32;
+        // We have to generate an image because we want to use the clip() function of the canvas and this does not work with putImageData()
+        img.push(b'B');
+        img.push(b'M');
+        img.extend_from_slice(&[0; 4+2+2+4]);
+        // DIB Header
+        // Using BITMAPINFOHEADER
+        img.extend_from_slice(&u32::to_le_bytes(40)[..]);
+        img.extend_from_slice(&i32::to_le_bytes(width as i32)[..]);
+        img.extend_from_slice(&i32::to_le_bytes(height as i32)[..]);
+        img.extend_from_slice(&u16::to_le_bytes(1)[..]); // Color planes
+        img.extend_from_slice(&u16::to_le_bytes(32)[..]); // Bits per pixel
+        img.extend_from_slice(&u32::to_le_bytes(0)[..]); // Compression method(none)
+        img.extend_from_slice(&u32::to_le_bytes(4*width*height)[..]); // Uncompressed image size
+        img.extend_from_slice(&u32::to_le_bytes(1)[..]); // Horizontal PPM
+        img.extend_from_slice(&u32::to_le_bytes(1)[..]); // Vertical PPM
+        img.extend_from_slice(&u32::to_le_bytes(0)[..]);
+        img.extend_from_slice(&u32::to_le_bytes(0)[..]);
+        match fill {
+            SpecialFill::EllipticGradient(_gradient, _stops, _repeat) => {
+                for y in 0..height {
+                    let _h = height - y;
+                    for _x in 0..width {
+                        img.extend_from_slice(&[255, 0, 128, 128]);
+                    }
+                }
+            },
+        }
+        self.clip();
+        let image = Image::from_path(format!("data:image/bmp;base64,{}", base64::encode(&img[..]))).unwrap();
+        self.draw_image(&image, path_rect.x(), path_rect.y());
     }
 
     fn stroke_style<'a>(&self, brush: &Brush) {
@@ -487,7 +573,7 @@ impl RenderContext2D {
                 self.canvas_render_context_2_d
                     .set_stroke_style_color(&color.to_string());
             }
-            Brush::LinearGradient { start, end, stops } => {
+            /*Brush::LinearGradient { start, end, stops } => {
                 let web_gradient = self.canvas_render_context_2_d.create_linear_gradient(
                     start.x(),
                     start.y(),
@@ -503,7 +589,8 @@ impl RenderContext2D {
 
                 self.canvas_render_context_2_d
                     .set_stroke_style_gradient(&web_gradient);
-            }
+            }*/
+            _ => unimplemented!("{:?}", brush)
         }
     }
 }

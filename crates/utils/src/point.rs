@@ -73,9 +73,9 @@ impl Point {
         self
     }
 
-    pub fn clamp(mut self, a: f64, b: f64) -> Point {
-        self.x = self.x.max(a).min(b);
-        self.y = self.y.max(a).min(b);
+    pub fn clamp(mut self, min: f64, max: f64) -> Point {
+        self.x = self.x.max(min).min(max);
+        self.y = self.y.max(min).min(max);
         self
     }
 }
@@ -116,9 +116,9 @@ impl Mul<Point> for Point {
     type Output = Point;
 
     fn mul(mut self, rhs: Point) -> Self::Output {
-        self.x *= rhs.x();
-        self.y *= rhs.y();
-        rhs
+        self.x = self.x * rhs.x();
+        self.y = self.y * rhs.y();
+        self
     }
 }
 
@@ -126,9 +126,9 @@ impl Div<Point> for Point {
     type Output = Point;
 
     fn div(mut self, rhs: Point) -> Self::Output {
-        self.x /= rhs.x();
-        self.y /= rhs.y();
-        rhs
+        self.x = self.x / rhs.x();
+        self.y = self.y / rhs.y();
+        self
     }
 }
 

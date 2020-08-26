@@ -85,3 +85,116 @@ pub fn cubic_rect(p0: Point, p1: Point, p2: Point, p3: Point) -> Rectangle {
     }
     Rectangle::new(mi, Size::new(ma.x()-mi.x(), ma.y()-mi.y()))
 }
+
+#[derive(Debug, Copy, Clone)]
+pub struct PathRectTrack {
+    path_rect: Option<Rectangle>,
+    last_path_point: Point,
+    first_path_point: Option<Point>,
+    is_the_path_rect_fixed: bool,
+}
+
+impl PathRectTrack {
+    pub fn new() -> PathRectTrack {
+        PathRectTrack {
+            path_rect: None,
+            last_path_point: Point::new(0.0, 0.0),
+            first_path_point: None,
+            is_the_path_rect_fixed: false,
+        }
+    }
+
+    pub fn close_path(&mut self) {
+        self.last_path_point = self.first_path_point.unwrap_or(Point::new(0.0, 0.0));
+    }
+
+    pub fn rect(&mut self, x: f64, y: f64, width: f64, height: f64) {
+        if !self.is_the_path_rect_fixed {
+            let r = Rectangle::new((x, y), (width, height));
+            if let Some(ref mut path_rect) = self.path_rect {
+                path_rect.join_with_rectangle(&r);
+            }
+            else {
+                self.path_rect = Some(r);
+            }
+            self.last_path_point = Point::new(x, y);
+            if self.first_path_point.is_none() {
+                self.first_path_point = Some(Point::new(x, y));
+            }
+        }
+    }
+
+    pub fn arc(&mut self, x: f64, y: f64, radius: f64, start_angle: f64, end_angle: f64) {
+        if !self.is_the_path_rect_fixed {
+            let r = arc_rect(x, y, radius, start_angle, end_angle);
+            if let Some(ref mut path_rect) = self.path_rect {
+                path_rect.join_with_rectangle(&r);
+            }
+            else {
+                self.path_rect = Some(r);
+            }
+            let (mut end_y, mut end_x) = f64::sin_cos(end_angle);
+            end_x = x + end_x * radius;
+            end_y = y + end_y * radius;
+            self.last_path_point = Point::new(end_x, end_y);
+            if self.first_path_point.is_none() {
+                self.first_path_point = Some(Point::new(end_x, end_y));
+            }
+        }
+    }
+
+    pub fn insert_point_at(&mut self, x: f64, y: f64) {
+        if !self.is_the_path_rect_fixed {
+            if let Some(ref mut path_rect) = self.path_rect {
+                path_rect.join_with_point(&Point::new(x, y));
+            }
+            else {
+                self.path_rect = Some(Rectangle::new(Point::new(x, y), (0.0, 0.0)));
+            }
+            self.last_path_point = Point::new(x, y);
+            if self.first_path_point.is_none() {
+                self.first_path_point = Some(Point::new(x, y));
+            }
+        }
+    }
+
+    pub fn quadratic_curve_to(&mut self, cpx: f64, cpy: f64, x: f64, y: f64) {
+        if !self.is_the_path_rect_fixed {
+            let r = quad_rect(self.last_path_point, Point::new(cpx, cpy), Point::new(x, y));
+            if let Some(ref mut path_rect) = self.path_rect {
+                path_rect.join_with_rectangle(&r);
+            }
+            else {
+                self.path_rect = Some(r);
+            }
+            self.last_path_point = Point::new(x, y);
+            if self.first_path_point.is_none() {
+                self.first_path_point = Some(Point::new(x, y));
+            }
+        }
+    }
+
+    pub fn bezier_curve_to(&mut self, cp1x: f64, cp1y: f64, cp2x: f64, cp2y: f64, x: f64, y: f64) {
+        if !self.is_the_path_rect_fixed {
+            let r = cubic_rect(self.last_path_point, Point::new(cp1x, cp1y), Point::new(cp2x, cp2y), Point::new(x, y));
+            if let Some(ref mut path_rect) = self.path_rect {
+                path_rect.join_with_rectangle(&r);
+            }
+            else {
+                self.path_rect = Some(r);
+            }
+            self.last_path_point = Point::new(x, y);
+            if self.first_path_point.is_none() {
+                self.first_path_point = Some(Point::new(x, y));
+            }
+        }
+    }
+
+    pub fn clip(&mut self) {
+        self.is_the_path_rect_fixed = true;
+    }
+
+    pub fn get_rect(&self) -> Option<Rectangle> {
+        self.path_rect
+    }
+}

@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 * PasswordBox widget
 * Refactor on_changed callback, add key parameter
+* Add support for linear gradients on themes
+* Add radial gradients support
 
 ### 0.3.1-alpha3
 

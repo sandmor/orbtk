@@ -1,9 +1,10 @@
 use crate::prelude::*;
 use std::f64;
 use std::iter::Peekable;
-use std::str::Chars;
+use std::ops::Neg;
+use std::{convert::TryFrom, str::Chars};
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, PartialOrd, Debug)]
 pub enum ExprOrOp {
     Expression(Expression),
     Operator(Operator),
@@ -19,7 +20,7 @@ impl ExprOrOp {
 }
 
 // Describes a RON declared function.
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, PartialOrd, Debug)]
 pub enum Expression {
     Method(String, Vec<Expression>),
     Complex(Vec<ExprOrOp>),
@@ -97,9 +98,9 @@ impl Expression {
                 let mut angle = match &unit[..] {
                     "rad" => num,
                     "turn" => f64::consts::PI * 2.0 * num,
+                    "" | "deg" => num * f64::consts::PI / 180.0,
                     _ => {
-                        // Fallback to degrees
-                        num * f64::consts::PI / 180.0
+                        return None;
                     }
                 };
                 if angle.is_sign_negative() {
@@ -131,12 +132,8 @@ impl Expression {
     }
 
     pub fn gradient_stop(&self) -> Option<GradientStop> {
-        dbg!(&self);
         if let Some(color) = self.color() {
-            return Some(GradientStop {
-                kind: GradientStopKind::Interpolated,
-                color,
-            });
+            return Some(GradientStop { pos: None, color });
         }
         match self {
             Expression::Complex(v) if v.len() == 2 => {
@@ -145,50 +142,239 @@ impl Expression {
                     None => return None,
                 };
                 let (number, m) = match v[1].expression() {
-                    Some(Expression::Number(n, m)) => (n, m),
+                    Some(Expression::Number(n, m)) => (*n, m),
                     _ => return None,
                 };
-                let kind = match &m[..] {
-                    "%" => {
-                        let mut o: f64 = (*number).into();
-                        o /= 100.0;
-                        GradientStopKind::Fixed(o)
-                    }
-                    "px" => {
-                        let o: f64 = (*number).into();
-                        GradientStopKind::Pixels(o)
-                    }
-                    _ => return None,
-                };
-                Some(GradientStop { kind, color })
+                let pos = OnLinePos::try_from((number.into(), &m[..])).ok()?;
+                Some(GradientStop {
+                    pos: Some(pos),
+                    color,
+                })
             }
             _ => None,
         }
     }
 
     pub fn css_gradient(&self) -> Option<Gradient> {
+        let mut displacement = OnPlanePos::new(
+            OnLinePos::new(0.0, OnLinePosKind::Pixels),
+            OnLinePos::new(0.0, OnLinePosKind::Pixels),
+        );
         let (name, args) = match self {
             Expression::Method(name, args) => (name, args),
+            Expression::Complex(exprs) if exprs.len() <= 3 + 1 => {
+                let mut i = 0;
+                let (name, args) = match exprs.get(i) {
+                    Some(ExprOrOp::Expression(Expression::Method(name, args))) => {
+                        i += 1;
+                        (name, args)
+                    }
+                    _ => {
+                        return None;
+                    }
+                };
+                let mut disp_arr = [OnLinePos::default(); 2];
+                let mut exprs_idx = i;
+                let mut sign = None;
+                for arr_idx in 0..2 {
+                    match exprs.get(exprs_idx) {
+                        Some(ExprOrOp::Operator(Operator::Add)) if sign.is_none() => {
+                            sign = Some(true);
+                        }
+                        Some(ExprOrOp::Operator(Operator::Sub)) if sign.is_none() => {
+                            sign = Some(false);
+                        }
+                        Some(ExprOrOp::Expression(Expression::Number(n, u))) => {
+                            let mut pos = OnLinePos::try_from(((*n).into(), &u[..])).ok()?;
+                            if let Some(sign) = sign.take() {
+                                if !sign {
+                                    pos = -pos;
+                                }
+                            }
+                            disp_arr[arr_idx] = pos;
+                        }
+                        None => break,
+                        _ => {
+                            return None;
+                        }
+                    }
+                    exprs_idx += 1;
+                }
+                if exprs.len() == 4 && exprs_idx != 3 {
+                    return None;
+                }
+                *displacement.x_mut() = disp_arr[0];
+                *displacement.y_mut() = disp_arr[1];
+                (name, args)
+            }
             _ => return None,
         };
         if args.is_empty() {
             return None;
         }
-        let (kind, repeat) = match &name[..] {
-            "repeating-linear-gradient" => (GradientKind::Linear, true),
-            "linear-gradient" => (GradientKind::Linear, false),
+        let (radial, repeat) = match &name[..] {
+            "repeating-linear-gradient" => (false, true),
+            "linear-gradient" => (false, false),
+            "radial-gradient" => (true, false),
+            "repeating-radial-gradient" => (true, true),
             _ => {
                 return None;
             }
         };
         let mut i = 0;
-        let mut coords = GradientCoords::Angle { radians: 0.0 };
-        if let Some(direction) = args[0].direction() {
-            coords = GradientCoords::Direction(direction);
-            i += 1;
-        } else if let Some(radians) = args[0].angle() {
-            coords = GradientCoords::Angle { radians };
-            i += 1;
+        let kind;
+        if radial {
+            let mut g = RadialGradient::default();
+            if let Expression::Other(ref s) = args[0] {
+                match &s[..] {
+                    "ellipse" => {
+                        g.size = RadialGradientSize::ToClosestSide(false);
+                    }
+                    "circle" => {
+                        g.size = RadialGradientSize::ToClosestSide(true);
+                    }
+                    _ => {}
+                }
+            }
+            match args[0] {
+                Expression::Complex(ref c) if !c.is_empty() => {
+                    let mut i = 0;
+                    let mut force_circle = false;
+                    // Shape definition
+                    match c[i] {
+                        ExprOrOp::Expression(Expression::Other(ref s)) => {
+                            i += 1;
+                            match &s[..] {
+                                "ellipse" => {
+                                    let mut size = [OnLinePos::default(); 2];
+                                    let mut with_size = true;
+                                    for j in 0..2 {
+                                        match c.get(i) {
+                                            Some(ExprOrOp::Expression(Expression::Number(
+                                                n,
+                                                u,
+                                            ))) => {
+                                                size[j] =
+                                                    OnLinePos::try_from(((*n).into(), &u[..]))
+                                                        .ok()?;
+                                                i += 1;
+                                            }
+                                            _ if j == 0 => {
+                                                with_size = false;
+                                            }
+                                            _ => {
+                                                return None;
+                                            }
+                                        }
+                                    }
+                                    if with_size {
+                                        g.size = RadialGradientSize::Custom(OnPlanePos::new(
+                                            size[0], size[1],
+                                        ));
+                                    } else {
+                                        g.size = RadialGradientSize::ToClosestSide(false);
+                                    }
+                                }
+                                "circle" => {
+                                    force_circle = true;
+                                    match c.get(i) {
+                                        Some(ExprOrOp::Expression(Expression::Number(n, u))) => {
+                                            g.size = RadialGradientSize::Radius(
+                                                OnLinePos::try_from(((*n).into(), &u[..])).ok()?,
+                                            );
+                                            i += 1;
+                                        }
+                                        _ => {
+                                            g.size = RadialGradientSize::ToClosestSide(true);
+                                        }
+                                    }
+                                }
+                                _ => {
+                                    i -= 1;
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+                    if let Some(ExprOrOp::Expression(Expression::Other(ref o))) = c.get(i) {
+                        let mut o = &o[..];
+                        if i <= 1 {
+                            if o.starts_with("closest-side") {
+                                g.size = RadialGradientSize::ToClosestSide(force_circle);
+                                o = &o[o.len()-1-2..];
+                            }
+                            else if o.starts_with("closest-corner") {
+                                g.size = RadialGradientSize::ToClosestCorner(force_circle);
+                                o = &o[o.len()-1-2..];
+                            }
+                            else if o.starts_with("farthest-side") {
+                                g.size = RadialGradientSize::ToFarthestSide(force_circle);
+                                o = &o[o.len()-1-2..];
+                            }
+                            else if o.starts_with("farthest-corner") {
+                                g.size = RadialGradientSize::ToFarthestCorner(force_circle);
+                                o = &o[o.len()-1-2..];
+                            }
+                        }
+                        // Position definition
+                        if o == "at" {
+                            i += 1;
+                            let mut sign = None;
+                            let mut res_arr = [OnLinePos::default(); 2];
+                            for arr_idx in 0..2 {
+                                match c.get(i) {
+                                    Some(ExprOrOp::Operator(Operator::Add)) if sign.is_none() => {
+                                        sign = Some(true);
+                                    }
+                                    Some(ExprOrOp::Operator(Operator::Sub)) if sign.is_none() => {
+                                        sign = Some(false);
+                                    }
+                                    Some(ExprOrOp::Expression(Expression::Number(n, u))) => {
+                                        let mut pos =
+                                            OnLinePos::try_from(((*n).into(), &u[..])).ok()?;
+                                        if let Some(sign) = sign.take() {
+                                            if !sign {
+                                                pos = -pos;
+                                            }
+                                        }
+                                        res_arr[arr_idx] = pos;
+                                    }
+                                    None => break,
+                                    _ => {
+                                        return None;
+                                    }
+                                }
+                                i += 1;
+                            }
+                            g.pos = Some(OnPlanePos::new(res_arr[0], res_arr[1]));
+                        }
+                        else if !o.is_empty() {
+                            return None;
+                        }
+                    }
+                }
+                _ => {}
+            }
+            kind = GradientKind::Radial(g);
+        } else {
+            let mut coords = LinearGradientCoords::Angle {
+                radians: 0.0,
+                displacement,
+            };
+            if let Some(direction) = args[0].direction() {
+                coords = LinearGradientCoords::Direction {
+                    direction,
+                    displacement,
+                };
+                i += 1;
+            } else if let Some(radians) = args[0].angle() {
+                coords = LinearGradientCoords::Angle {
+                    radians,
+                    displacement,
+                };
+                i += 1;
+            }
+            kind = GradientKind::Linear(coords);
         }
         let mut stops = Vec::new();
         for i in i..args.len() {
@@ -203,7 +389,6 @@ impl Expression {
         }
         Some(Gradient {
             kind,
-            coords,
             stops,
             repeat,
         })
@@ -226,19 +411,6 @@ impl Default for Expression {
     }
 }
 
-impl From<String> for Expression {
-    fn from(s: String) -> Self {
-        Self::from(&s[..])
-    }
-}
-
-impl From<&str> for Expression {
-    fn from(s: &str) -> Expression {
-        let mut s = s.chars().peekable();
-        parse_expression_with_complex(&mut s).unwrap_or_default()
-    }
-}
-
 impl Into<Number> for Expression {
     fn into(self) -> Number {
         match self {
@@ -248,7 +420,7 @@ impl Into<Number> for Expression {
     }
 }
 
-fn parse_expression_with_complex(chrs: &mut Peekable<Chars>) -> Option<Expression> {
+pub(crate) fn parse_expression_with_complex(chrs: &mut Peekable<Chars>) -> Option<Expression> {
     let mut v = Vec::new();
     loop {
         if let Some(c) = chrs.peek() {
@@ -384,5 +556,140 @@ fn parse_expression(chrs: &mut Peekable<Chars>) -> Option<Expression> {
             }
         }
         Some(Expression::Other(text))
+    }
+}
+
+impl From<&str> for Expression {
+    fn from(s: &str) -> Expression {
+        parse_expression_with_complex(&mut s.chars().peekable()).unwrap_or_default()
+    }
+}
+
+impl From<String> for Expression {
+    fn from(s: String) -> Expression {
+        Expression::from(&s[..])
+    }
+}
+
+#[derive(Debug, Copy, Clone, PartialOrd, PartialEq)]
+pub struct OnPlanePos {
+    x: OnLinePos,
+    y: OnLinePos,
+}
+
+impl OnPlanePos {
+    pub fn new(x: OnLinePos, y: OnLinePos) -> OnPlanePos {
+        OnPlanePos { x, y }
+    }
+
+    pub fn x(&self) -> OnLinePos {
+        self.x
+    }
+
+    pub fn y(&self) -> OnLinePos {
+        self.y
+    }
+
+    pub fn x_mut(&mut self) -> &mut OnLinePos {
+        &mut self.x
+    }
+
+    pub fn y_mut(&mut self) -> &mut OnLinePos {
+        &mut self.y
+    }
+
+    pub fn pixels(&self, size: Size) -> Point {
+        Point::from((self.x.pixels(size.width()), self.y.pixels(size.height())))
+    }
+}
+
+impl Default for OnPlanePos {
+    fn default() -> Self {
+        OnPlanePos::new(Default::default(), Default::default())
+    }
+}
+
+#[derive(Debug, Copy, Clone, PartialOrd, PartialEq)]
+pub struct OnLinePos {
+    pos: f64,
+    kind: OnLinePosKind,
+}
+
+impl OnLinePos {
+    pub fn new(pos: f64, kind: OnLinePosKind) -> OnLinePos {
+        OnLinePos { pos, kind }
+    }
+
+    pub fn pos(&self) -> f64 {
+        self.pos
+    }
+
+    pub fn pixels(&self, line_length: f64) -> f64 {
+        match self.kind {
+            OnLinePosKind::Pixels => self.pos,
+            OnLinePosKind::Percentage => line_length * self.pos / 100.0,
+        }
+    }
+
+    pub fn percent(&self, line_length: f64) -> f64 {
+        match self.kind {
+            OnLinePosKind::Pixels => self.pos / line_length * 100.0,
+            OnLinePosKind::Percentage => self.pos,
+        }
+    }
+
+    pub fn unit_percent(&self, line_length: f64) -> f64 {
+        self.percent(line_length) / 100.0
+    }
+}
+
+impl Default for OnLinePos {
+    fn default() -> Self {
+        Self {
+            pos: 0.0,
+            kind: OnLinePosKind::default(),
+        }
+    }
+}
+
+impl TryFrom<(f64, &str)> for OnLinePos {
+    type Error = ();
+
+    fn try_from(value: (f64, &str)) -> Result<Self, Self::Error> {
+        let kind = OnLinePosKind::try_from(value.1)?;
+        Ok(OnLinePos { pos: value.0, kind })
+    }
+}
+
+#[derive(Debug, Copy, Clone, PartialOrd, PartialEq)]
+pub enum OnLinePosKind {
+    Percentage,
+    Pixels,
+}
+
+impl TryFrom<&str> for OnLinePosKind {
+    type Error = ();
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value {
+            "px" => Ok(OnLinePosKind::Pixels),
+            "%" => Ok(OnLinePosKind::Percentage),
+            _ => Err(()),
+        }
+    }
+}
+
+impl Default for OnLinePosKind {
+    fn default() -> Self {
+        Self::Pixels
+    }
+}
+
+impl Neg for OnLinePos {
+    type Output = OnLinePos;
+
+    fn neg(mut self) -> Self::Output {
+        self.pos = -self.pos;
+        self
     }
 }

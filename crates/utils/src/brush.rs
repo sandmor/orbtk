@@ -6,8 +6,10 @@ pub enum Brush {
     /// Paints an area with a solid color.
     SolidColor(Color),
 
-    /// Paints an area with a linear gradient.
+    /// Paints an area with a gradient.
     Gradient(Gradient),
+
+    Stacked(Vec<Brush>),
 }
 
 impl Brush {
@@ -57,7 +59,7 @@ impl From<Gradient> for Brush {
 
 impl From<&str> for Brush {
     fn from(s: &str) -> Brush {
-        Expression::from(s).brush().unwrap_or_default()
+        Property::from(s).brush().unwrap_or_default()
     }
 }
 

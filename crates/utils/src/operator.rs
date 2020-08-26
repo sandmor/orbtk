@@ -1,7 +1,10 @@
-#[derive(Copy, Clone, PartialEq, Debug)]
+#[derive(Copy, Clone, PartialEq, PartialOrd, Debug)]
 pub enum Operator {
-    Add, /// +
-    Sub, /// -
-    Mul, /// *
+    Add,
+    /// +
+    Sub,
+    /// -
+    Mul,
+    /// *
     Div,
 }

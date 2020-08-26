@@ -161,3 +161,11 @@ alto #dadada
 fiord #475b6e
 manatee #949ca5
 gorduroy #586864
+bluebayoux #516475
+bombay #afb1b8
+portage #9e98f9
+governorbay #3034b2
+manz #e5e552
+sandwisp #dec982
+dolly #ffff81
+goldenfizz #ebde31
