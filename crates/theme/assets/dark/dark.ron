@@ -6,6 +6,7 @@ Theme (
                 "font_family": "$MEDIUM_FONT",
                 "icon_size": "$ICON_SIZE_16",
                 "icon_family": "$ICON_FONT",
+                 "opacity": 1.0,
             },
         ),
         "window": (
@@ -44,9 +45,8 @@ Theme (
                     "background": "linear-gradient(to top, cadetblue, bluebayoux)",
                 },
                 "disabled": {
-                    "foreground": "$BRIGHT_GRAY",
-                    "icon_brush": "$BRIGHT_GRAY",
-                },
+                    "opacity": 0.5,
+                }
             },
         ),
         "button_primary": (
@@ -98,9 +98,6 @@ Theme (
             states: {
                  "pressed": {
                     "background": "$BLUE_BAYOUX",
-                },
-                "disabled": {
-                    "icon_brush": "$MANATEE",
                 },
             }
         ),
