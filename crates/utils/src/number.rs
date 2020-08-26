@@ -14,7 +14,11 @@ impl Default for Number {
 
 impl Neg for Number {
     type Output = Number;
+<<<<<<< HEAD
 
+=======
+    
+>>>>>>> 2bb30e4b7ea19218982317842e8db54a210db657
     fn neg(self) -> Self::Output {
         match self {
             Number::Float(n) => Number::Float(-n),
@@ -30,12 +34,20 @@ macro_rules! impl_float {
                 Number::Float(n as f64)
             }
         }
+<<<<<<< HEAD
 
+=======
+        
+>>>>>>> 2bb30e4b7ea19218982317842e8db54a210db657
         impl Into<$t> for Number {
             fn into(self) -> $t {
                 match self {
                     Number::Real(n) => n as $t,
+<<<<<<< HEAD
                     Number::Float(n) => n as $t,
+=======
+                    Number::Float(n) => n as $t
+>>>>>>> 2bb30e4b7ea19218982317842e8db54a210db657
                 }
             }
         }
@@ -54,7 +66,11 @@ macro_rules! impl_real {
             fn into(self) -> $t {
                 match self {
                     Number::Real(n) => n as $t,
+<<<<<<< HEAD
                     Number::Float(n) => n as $t,
+=======
+                    Number::Float(n) => n as $t
+>>>>>>> 2bb30e4b7ea19218982317842e8db54a210db657
                 }
             }
         }

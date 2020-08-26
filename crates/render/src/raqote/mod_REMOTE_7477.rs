@@ -1,6 +1,7 @@
 use std::{cmp, collections::HashMap};
 
-use crate::{utils::*, common::*, PipelineTrait, RenderConfig, RenderTarget, TextMetrics};
+use crate::{utils::*, PipelineTrait, RenderConfig, RenderTarget, TextMetrics};
+use raqote::PathOp;
 use std::f64::consts::PI;
 
 pub use self::font::*;
@@ -14,6 +15,7 @@ pub struct RenderContext2D {
     draw_target: raqote::DrawTarget,
     path: raqote::Path,
     config: RenderConfig,
+    saved_config: Option<RenderConfig>,
     fonts: HashMap<String, Font>,
 
     // hack / work around for faster text clipping
@@ -22,9 +24,6 @@ pub struct RenderContext2D {
     clip_rect: Option<Rectangle>,
 
     background: Color,
-
-    path_rect: PathRectTrack,
-    saved_state: Option<(RenderConfig, PathRectTrack)>,
 }
 
 impl RenderContext2D {
@@ -37,13 +36,12 @@ impl RenderContext2D {
                 winding: raqote::Winding::NonZero,
             },
             config: RenderConfig::default(),
+            saved_config: None,
             fonts: HashMap::new(),
             clip: false,
             last_rect: Rectangle::new((0.0, 0.0), (width, height)),
             clip_rect: None,
             background: Color::default(),
-            path_rect: PathRectTrack::new(),
-            saved_state: None
         }
     }
 
@@ -309,13 +307,9 @@ impl RenderContext2D {
 
     /// Fills the current or given path with the current file style.
     pub fn fill(&mut self) {
-        let path_rect = match self.path_rect.get_rect() {
-            Some(r) => r,
-            None => return
-        };
         self.draw_target.fill(
             &self.path,
-            &brush_to_source(&self.config.fill_style, path_rect),
+            &brush_to_source(&self.config.fill_style, self.path_rect()),
             &raqote::DrawOptions {
                 alpha: self.config.alpha,
                 ..Default::default()
@@ -325,13 +319,9 @@ impl RenderContext2D {
 
     /// Strokes {outlines} the current or given path with the current stroke style.
     pub fn stroke(&mut self) {
-        let path_rect = match self.path_rect.get_rect() {
-            Some(r) => r,
-            None => return
-        };
         self.draw_target.stroke(
             &self.path,
-            &brush_to_source(&self.config.stroke_style, path_rect),
+            &brush_to_source(&self.config.stroke_style, self.path_rect()),
             &raqote::StrokeStyle {
                 width: self.config.line_width as f32,
                 ..Default::default()
@@ -349,7 +339,6 @@ impl RenderContext2D {
             ops: Vec::new(),
             winding: raqote::Winding::NonZero,
         };
-        self.path_rect = PathRectTrack::new();
     }
 
     /// Attempts to add a straight line from the current point to the start of the current sub-path. If the shape has already been closed or has only one point, this function does nothing.
@@ -357,7 +346,6 @@ impl RenderContext2D {
         let mut path_builder = raqote::PathBuilder::from(self.path.clone());
         path_builder.close();
         self.path = path_builder.finish();
-        self.path_rect.close_path();
     }
 
     /// Adds a rectangle to the current path.
@@ -366,7 +354,6 @@ impl RenderContext2D {
         let mut path_builder = raqote::PathBuilder::from(self.path.clone());
         path_builder.rect(x as f32, y as f32, width as f32, height as f32);
         self.path = path_builder.finish();
-        self.path_rect.rect(x, y, width, height);
     }
 
     /// Creates a circular arc centered at (x, y) with a radius of radius. The path starts at startAngle and ends at endAngle.
@@ -380,7 +367,6 @@ impl RenderContext2D {
             end_angle as f32,
         );
         self.path = path_builder.finish();
-        self.path_rect.arc(x, y, radius, start_angle, end_angle);
     }
 
     /// Begins a new sub-path at the point specified by the given {x, y} coordinates.
@@ -389,7 +375,6 @@ impl RenderContext2D {
         let mut path_builder = raqote::PathBuilder::from(self.path.clone());
         path_builder.move_to(x as f32, y as f32);
         self.path = path_builder.finish();
-        self.path_rect.insert_point_at(x, y);
     }
 
     /// Adds a straight line to the current sub-path by connecting the sub-path's last point to the specified {x, y} coordinates.
@@ -397,7 +382,6 @@ impl RenderContext2D {
         let mut path_builder = raqote::PathBuilder::from(self.path.clone());
         path_builder.line_to(x as f32, y as f32);
         self.path = path_builder.finish();
-        self.path_rect.insert_point_at(x, y);
     }
 
     /// Adds a quadratic Bézier curve to the current sub-path.
@@ -405,7 +389,6 @@ impl RenderContext2D {
         let mut path_builder = raqote::PathBuilder::from(self.path.clone());
         path_builder.quad_to(cpx as f32, cpy as f32, x as f32, y as f32);
         self.path = path_builder.finish();
-        self.path_rect.quadratic_curve_to(cpx, cpy, x, y);
     }
 
     /// Adds a cubic Bézier curve to the current sub-path.
@@ -421,7 +404,6 @@ impl RenderContext2D {
             x as f32,
             y as f32,
         );
-        self.path_rect.bezier_curve_to(cp1x, cp1y, cp2x, cp2y, x, y);
     }
 
     /// Draws a render target.
@@ -506,7 +488,6 @@ impl RenderContext2D {
         self.clip_rect = Some(self.last_rect);
         self.clip = true;
         self.draw_target.push_clip(&self.path);
-        self.clip();
     }
 
     // Line styles
@@ -570,7 +551,7 @@ impl RenderContext2D {
 
     /// Saves the entire state of the canvas by pushing the current state onto a stack.
     pub fn save(&mut self) {
-        self.saved_state = Some((self.config.clone(), self.path_rect.clone()));
+        self.saved_config = Some(self.config.clone());
     }
 
     /// Restores the most recently saved canvas state by popping the top entry in the drawing state stack.
@@ -579,10 +560,11 @@ impl RenderContext2D {
         self.clip = false;
         self.clip_rect = None;
         self.draw_target.pop_clip();
-        if let Some((config, path_rect)) = self.saved_state.take() {
-            self.config = config;
-            self.path_rect = path_rect;
+        if let Some(config) = &self.saved_config {
+            self.config = config.clone();
         }
+
+        self.saved_config = None;
     }
 
     pub fn clear(&mut self, brush: &Brush) {
@@ -632,7 +614,8 @@ fn brush_to_source<'a>(brush: &Brush, frame: Rectangle) -> raqote::Source<'a> {
             a: color.a(),
         }),
         Brush::Gradient(Gradient {
-            kind: GradientKind::Linear(coords),
+            kind: GradientKind::Linear,
+            coords,
             stops,
             repeat,
         }) => {
@@ -641,7 +624,7 @@ fn brush_to_source<'a>(brush: &Brush, frame: Rectangle) -> raqote::Source<'a> {
                 false => raqote::Spread::Pad,
             };
             match coords {
-                LinearGradientCoords::Ends { start, end } => {
+                GradientCoords::Ends { start, end } => {
                     let g_stops = build_gradient(&stops, end.distance(*start));
                     let start = frame.position() + *start;
                     let end = frame.position() + *end;
@@ -652,16 +635,15 @@ fn brush_to_source<'a>(brush: &Brush, frame: Rectangle) -> raqote::Source<'a> {
                         spread,
                     )
                 }
-                LinearGradientCoords::Angle {
-                    radians,
-                    displacement,
-                } => {
+                GradientCoords::Angle { radians } => {
                     let mut rad = *radians;
+                    dbg!(rad * 180.0 / PI);
                     rad += PI / 2.0; // Rotate 90° to make angle 0° point to top
-                                     //rad = PI * 2.0 - rad; // Invert angle direction to make it clockwise
+                    rad = PI * 2.0 - rad; // Invert angle direction to make it clockwise
                     if rad.is_sign_negative() {
                         rad = (PI * 2.0) - -rad;
-                    } else {
+                    }
+                    else {
                         rad = rad % (PI * 2.0);
                     }
                     let a = frame.width();
@@ -685,14 +667,14 @@ fn brush_to_source<'a>(brush: &Brush, frame: Rectangle) -> raqote::Source<'a> {
                     } else {
                         // -: False
                         z = Point::new((b * rad.cos()) / (2.0 * rad.sin()), b / 2.0);
-                        if rad > c || rad < PI - c {
+                        if rad >= PI + c || rad <= PI * 2.0 - c {
                             z = -z;
                         }
                     }
-                    let displacement = displacement.pixels(frame.size());
-                    let start = frame.position() + (frame.size() / 2.0) + -z + displacement;
-                    let end = frame.position() + (frame.size() / 2.0) + z + displacement;
+                    let start = frame.position() + (frame.size() / 2.0) + -z;
+                    let end = frame.position() + (frame.size() / 2.0) + z;
                     let g_stops = build_gradient(stops, end.distance(start));
+                    dbg!(&g_stops);
                     raqote::Source::new_linear_gradient(
                         raqote::Gradient { stops: g_stops },
                         raqote::Point::new(start.x() as f32, start.y() as f32),
@@ -700,18 +682,13 @@ fn brush_to_source<'a>(brush: &Brush, frame: Rectangle) -> raqote::Source<'a> {
                         spread,
                     )
                 }
-                LinearGradientCoords::Direction {
-                    direction,
-                    displacement,
-                } => {
+                GradientCoords::Direction(d) => {
                     let width = frame.width();
                     let height = frame.height();
-                    let (mut start, mut end) =
-                        start_and_end_from_direction(*direction, width, height);
+                    let (mut start, mut end) = start_and_end_from_direction(*d, width, height);
                     let g_stops = build_gradient(&stops, end.distance(start));
-                    let displacement = displacement.pixels(frame.size());
-                    start = start + frame.position() + displacement;
-                    end = end + frame.position() + displacement;
+                    start = start + frame.position();
+                    end = end + frame.position();
                     raqote::Source::new_linear_gradient(
                         raqote::Gradient { stops: g_stops },
                         raqote::Point::new(start.x() as f32, start.y() as f32),
@@ -721,52 +698,6 @@ fn brush_to_source<'a>(brush: &Brush, frame: Rectangle) -> raqote::Source<'a> {
                 }
             }
         }
-        Brush::Gradient(Gradient {
-            kind: GradientKind::Radial(params),
-            stops,
-            repeat,
-        }) => {
-            let spread = match repeat {
-                true => raqote::Spread::Repeat,
-                false => raqote::Spread::Pad,
-            };
-            let radius;
-            let mut scale_x = 1.0;
-            let mut scale_y = 1.0;
-            match params.size {
-                RadialGradientSize::ToClosestSide(circle) => {
-                    if frame.width() > frame.height() {
-                        scale_x = frame.height() / frame.width();
-                        radius = frame.height() / 2.0;
-                    }
-                    else {
-                        scale_y = frame.width() / frame.height();
-                        radius = frame.width() / 2.0;
-                    }
-                    if circle {
-                        scale_x = 1.0;
-                        scale_y = 1.0;
-                    }
-                },
-                _ => unimplemented!("{:?}", params.size)
-            }
-            let g_stops = build_gradient(&stops, radius * 2.0);
-            let center = frame.position() + (frame.size() / 2.0);
-            let mut source = raqote::Source::new_radial_gradient(
-                raqote::Gradient { stops: g_stops },
-                raqote::Point::new(center.x() as f32, center.y() as f32),
-                radius as f32,
-                spread,
-            );
-            match source {
-                raqote::Source::RadialGradient(_, _, ref mut t) => {
-                    *t = t.post_scale(scale_x as f32, scale_y as f32);
-                }
-                _ => unreachable!(),
-            }
-            source
-        },
-        e@_ => unimplemented!("{:?}", e)
     }
 }
 
@@ -815,57 +746,79 @@ fn build_gradient(stops: &[GradientStop], length: f64) -> Vec<raqote::GradientSt
     let mut g_stops = Vec::with_capacity(stops.len());
     let mut cursor = 0;
     let mut last_pos = 0.0;
+    dbg!(&stops);
     while cursor < stops.len() {
-        if let Some(pos) = stops[cursor].pos {
-            let pos = pos.unit_percent(length).min(1.0);
-            let c = stops[cursor].color;
-            g_stops.push(raqote::GradientStop {
-                position: (pos.max(last_pos) as f32),
-                color: raqote::Color::new(c.a(), c.r(), c.g(), c.b()),
-            });
-            last_pos = pos;
-            cursor += 1;
-        } else {
-            let mut second_cursor = cursor;
-            let mut end = None;
-            while second_cursor < stops.len() {
-                match stops[second_cursor].pos {
-                    Some(pos) => {
-                        end = Some(pos);
-                        break;
+        dbg!(cursor);
+        match stops[cursor].kind {
+            GradientStopKind::Interpolated => {
+                let mut second_cursor = cursor;
+                let mut end = None;
+                while second_cursor < stops.len() {
+                    match stops[second_cursor].kind {
+                        GradientStopKind::Fixed(e) => {
+                            end = Some(e);
+                            break;
+                        }
+                        GradientStopKind::Interpolated => {}
+                        GradientStopKind::Pixels(p) => {
+                            end = Some(p / length);
+                            break;
+                        }
                     }
-                    None => {}
+                    dbg!(second_cursor);
+                    second_cursor += 1;
                 }
-                second_cursor += 1;
+                let from_pos = match cursor == 0 {
+                    true => 0.0,
+                    false => match stops[cursor - 1].kind {
+                        GradientStopKind::Fixed(e) => e,
+                        GradientStopKind::Interpolated => unreachable!(),
+                        GradientStopKind::Pixels(p) => p / length,
+                    },
+                };
+                let mut count = (second_cursor - cursor) as f64;
+                let to_pos = match end {
+                    Some(tp) => tp,
+                    None => {
+                        count -= 1.0;
+                        1.0
+                    }
+                };
+                for i in cursor..second_cursor {
+                    let p = (from_pos + (to_pos - from_pos) / count * (i as f64)).min(1.0);
+                    let c = stops[i].color;
+                    g_stops.push(raqote::GradientStop {
+                        position: (p.max(last_pos) as f32),
+                        color: raqote::Color::new(c.a(), c.r(), c.g(), c.b()),
+                    });
+                    last_pos = p;
+                }
+                if end.is_none() {
+                    dbg!(end);
+                    break;
+                }
+                cursor = second_cursor;
             }
-            let from_pos = match cursor == 0 {
-                true => 0.0,
-                false => match stops[cursor - 1].pos {
-                    Some(p) => p.unit_percent(length),
-                    None => unreachable!(),
-                },
-            };
-            let mut count = (second_cursor - cursor) as f64;
-            let to_pos = match end {
-                Some(tp) => tp.unit_percent(length),
-                None => {
-                    count -= 1.0;
-                    1.0
-                }
-            };
-            for i in cursor..second_cursor {
-                let p = (from_pos + (to_pos - from_pos) / count * (i as f64)).min(1.0);
-                let c = stops[i].color;
+            GradientStopKind::Fixed(mut pos) => {
+                pos = pos.min(1.0);
+                let c = stops[cursor].color;
                 g_stops.push(raqote::GradientStop {
-                    position: (p.max(last_pos) as f32),
+                    position: (pos.max(last_pos) as f32),
                     color: raqote::Color::new(c.a(), c.r(), c.g(), c.b()),
                 });
-                last_pos = p;
+                last_pos = pos;
+                cursor += 1;
             }
-            if end.is_none() {
-                break;
+            GradientStopKind::Pixels(pos_in_pixels) => {
+                let pos = (pos_in_pixels / length).min(1.0);
+                let c = stops[cursor].color;
+                g_stops.push(raqote::GradientStop {
+                    position: (pos.max(last_pos) as f32),
+                    color: raqote::Color::new(c.a(), c.r(), c.g(), c.b()),
+                });
+                last_pos = pos;
+                cursor += 1;
             }
-            cursor = second_cursor;
         }
     }
     g_stops

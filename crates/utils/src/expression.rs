@@ -1,10 +1,16 @@
 use crate::prelude::*;
 use std::f64;
 use std::iter::Peekable;
+<<<<<<< HEAD
 use std::ops::Neg;
 use std::{convert::TryFrom, str::Chars};
 
 #[derive(Clone, PartialEq, PartialOrd, Debug)]
+=======
+use std::str::Chars;
+
+#[derive(Clone, PartialEq, Debug)]
+>>>>>>> 2bb30e4b7ea19218982317842e8db54a210db657
 pub enum ExprOrOp {
     Expression(Expression),
     Operator(Operator),
@@ -20,7 +26,11 @@ impl ExprOrOp {
 }
 
 // Describes a RON declared function.
+<<<<<<< HEAD
 #[derive(Clone, PartialEq, PartialOrd, Debug)]
+=======
+#[derive(Clone, PartialEq, Debug)]
+>>>>>>> 2bb30e4b7ea19218982317842e8db54a210db657
 pub enum Expression {
     Method(String, Vec<Expression>),
     Complex(Vec<ExprOrOp>),
@@ -98,9 +108,15 @@ impl Expression {
                 let mut angle = match &unit[..] {
                     "rad" => num,
                     "turn" => f64::consts::PI * 2.0 * num,
+<<<<<<< HEAD
                     "" | "deg" => num * f64::consts::PI / 180.0,
                     _ => {
                         return None;
+=======
+                    _ => {
+                        // Fallback to degrees
+                        num * f64::consts::PI / 180.0
+>>>>>>> 2bb30e4b7ea19218982317842e8db54a210db657
                     }
                 };
                 if angle.is_sign_negative() {
@@ -132,8 +148,17 @@ impl Expression {
     }
 
     pub fn gradient_stop(&self) -> Option<GradientStop> {
+<<<<<<< HEAD
         if let Some(color) = self.color() {
             return Some(GradientStop { pos: None, color });
+=======
+        dbg!(&self);
+        if let Some(color) = self.color() {
+            return Some(GradientStop {
+                kind: GradientStopKind::Interpolated,
+                color,
+            });
+>>>>>>> 2bb30e4b7ea19218982317842e8db54a210db657
         }
         match self {
             Expression::Complex(v) if v.len() == 2 => {
@@ -142,6 +167,7 @@ impl Expression {
                     None => return None,
                 };
                 let (number, m) = match v[1].expression() {
+<<<<<<< HEAD
                     Some(Expression::Number(n, m)) => (*n, m),
                     _ => return None,
                 };
@@ -150,12 +176,31 @@ impl Expression {
                     pos: Some(pos),
                     color,
                 })
+=======
+                    Some(Expression::Number(n, m)) => (n, m),
+                    _ => return None,
+                };
+                let kind = match &m[..] {
+                    "%" => {
+                        let mut o: f64 = (*number).into();
+                        o /= 100.0;
+                        GradientStopKind::Fixed(o)
+                    }
+                    "px" => {
+                        let o: f64 = (*number).into();
+                        GradientStopKind::Pixels(o)
+                    }
+                    _ => return None,
+                };
+                Some(GradientStop { kind, color })
+>>>>>>> 2bb30e4b7ea19218982317842e8db54a210db657
             }
             _ => None,
         }
     }
 
     pub fn css_gradient(&self) -> Option<Gradient> {
+<<<<<<< HEAD
         let mut displacement = OnPlanePos::new(
             OnLinePos::new(0.0, OnLinePosKind::Pixels),
             OnLinePos::new(0.0, OnLinePosKind::Pixels),
@@ -207,21 +252,32 @@ impl Expression {
                 *displacement.y_mut() = disp_arr[1];
                 (name, args)
             }
+=======
+        let (name, args) = match self {
+            Expression::Method(name, args) => (name, args),
+>>>>>>> 2bb30e4b7ea19218982317842e8db54a210db657
             _ => return None,
         };
         if args.is_empty() {
             return None;
         }
+<<<<<<< HEAD
         let (radial, repeat) = match &name[..] {
             "repeating-linear-gradient" => (false, true),
             "linear-gradient" => (false, false),
             "radial-gradient" => (true, false),
             "repeating-radial-gradient" => (true, true),
+=======
+        let (kind, repeat) = match &name[..] {
+            "repeating-linear-gradient" => (GradientKind::Linear, true),
+            "linear-gradient" => (GradientKind::Linear, false),
+>>>>>>> 2bb30e4b7ea19218982317842e8db54a210db657
             _ => {
                 return None;
             }
         };
         let mut i = 0;
+<<<<<<< HEAD
         let kind;
         if radial {
             let mut g = RadialGradient::default();
@@ -375,6 +431,15 @@ impl Expression {
                 i += 1;
             }
             kind = GradientKind::Linear(coords);
+=======
+        let mut coords = GradientCoords::Angle { radians: 0.0 };
+        if let Some(direction) = args[0].direction() {
+            coords = GradientCoords::Direction(direction);
+            i += 1;
+        } else if let Some(radians) = args[0].angle() {
+            coords = GradientCoords::Angle { radians };
+            i += 1;
+>>>>>>> 2bb30e4b7ea19218982317842e8db54a210db657
         }
         let mut stops = Vec::new();
         for i in i..args.len() {
@@ -389,6 +454,10 @@ impl Expression {
         }
         Some(Gradient {
             kind,
+<<<<<<< HEAD
+=======
+            coords,
+>>>>>>> 2bb30e4b7ea19218982317842e8db54a210db657
             stops,
             repeat,
         })
@@ -411,6 +480,22 @@ impl Default for Expression {
     }
 }
 
+<<<<<<< HEAD
+=======
+impl From<String> for Expression {
+    fn from(s: String) -> Self {
+        Self::from(&s[..])
+    }
+}
+
+impl From<&str> for Expression {
+    fn from(s: &str) -> Expression {
+        let mut s = s.chars().peekable();
+        parse_expression_with_complex(&mut s).unwrap_or_default()
+    }
+}
+
+>>>>>>> 2bb30e4b7ea19218982317842e8db54a210db657
 impl Into<Number> for Expression {
     fn into(self) -> Number {
         match self {
@@ -420,7 +505,11 @@ impl Into<Number> for Expression {
     }
 }
 
+<<<<<<< HEAD
 pub(crate) fn parse_expression_with_complex(chrs: &mut Peekable<Chars>) -> Option<Expression> {
+=======
+fn parse_expression_with_complex(chrs: &mut Peekable<Chars>) -> Option<Expression> {
+>>>>>>> 2bb30e4b7ea19218982317842e8db54a210db657
     let mut v = Vec::new();
     loop {
         if let Some(c) = chrs.peek() {
@@ -558,6 +647,7 @@ fn parse_expression(chrs: &mut Peekable<Chars>) -> Option<Expression> {
         Some(Expression::Other(text))
     }
 }
+<<<<<<< HEAD
 
 impl From<&str> for Expression {
     fn from(s: &str) -> Expression {
@@ -693,3 +783,5 @@ impl Neg for OnLinePos {
         self
     }
 }
+=======
+>>>>>>> 2bb30e4b7ea19218982317842e8db54a210db657

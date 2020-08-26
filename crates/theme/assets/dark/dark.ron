@@ -32,7 +32,8 @@ Theme (
                 "height": 36,
                 "foreground": "$LINK_WATER",
                 "icon_brush": "$LINK_WATER",
-                "background": "$LYNCH",
+                //"background": "$LYNCH",
+                "background": "linear-gradient(0deg, goldtips 0%, rgb(255,242,15) 100%)",
                 "border_radius": 4,
             }, 
             states: {
@@ -43,7 +44,6 @@ Theme (
                     "background": "linear-gradient(to top, cadetblue, bluebayoux)",
                 },
                 "disabled": {
-                    "background": "$ROLLING_STONE",
                     "foreground": "$BRIGHT_GRAY",
                     "icon_brush": "$BRIGHT_GRAY",
                 },

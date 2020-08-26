@@ -1,6 +1,11 @@
 use std::{cmp, collections::HashMap};
 
+<<<<<<< HEAD
 use crate::{utils::*, common::*, PipelineTrait, RenderConfig, RenderTarget, TextMetrics};
+=======
+use crate::{utils::*, PipelineTrait, RenderConfig, RenderTarget, TextMetrics};
+use raqote::PathOp;
+>>>>>>> 2bb30e4b7ea19218982317842e8db54a210db657
 use std::f64::consts::PI;
 
 pub use self::font::*;
@@ -315,7 +320,11 @@ impl RenderContext2D {
         };
         self.draw_target.fill(
             &self.path,
+<<<<<<< HEAD
             &brush_to_source(&self.config.fill_style, path_rect),
+=======
+            &brush_to_source(&self.config.fill_style, self.path_rect()),
+>>>>>>> 2bb30e4b7ea19218982317842e8db54a210db657
             &raqote::DrawOptions {
                 alpha: self.config.alpha,
                 ..Default::default()
@@ -331,7 +340,11 @@ impl RenderContext2D {
         };
         self.draw_target.stroke(
             &self.path,
+<<<<<<< HEAD
             &brush_to_source(&self.config.stroke_style, path_rect),
+=======
+            &brush_to_source(&self.config.stroke_style, self.path_rect()),
+>>>>>>> 2bb30e4b7ea19218982317842e8db54a210db657
             &raqote::StrokeStyle {
                 width: self.config.line_width as f32,
                 ..Default::default()
@@ -632,7 +645,12 @@ fn brush_to_source<'a>(brush: &Brush, frame: Rectangle) -> raqote::Source<'a> {
             a: color.a(),
         }),
         Brush::Gradient(Gradient {
+<<<<<<< HEAD
             kind: GradientKind::Linear(coords),
+=======
+            kind: GradientKind::Linear,
+            coords,
+>>>>>>> 2bb30e4b7ea19218982317842e8db54a210db657
             stops,
             repeat,
         }) => {
@@ -641,7 +659,11 @@ fn brush_to_source<'a>(brush: &Brush, frame: Rectangle) -> raqote::Source<'a> {
                 false => raqote::Spread::Pad,
             };
             match coords {
+<<<<<<< HEAD
                 LinearGradientCoords::Ends { start, end } => {
+=======
+                GradientCoords::Ends { start, end } => {
+>>>>>>> 2bb30e4b7ea19218982317842e8db54a210db657
                     let g_stops = build_gradient(&stops, end.distance(*start));
                     let start = frame.position() + *start;
                     let end = frame.position() + *end;
@@ -652,6 +674,7 @@ fn brush_to_source<'a>(brush: &Brush, frame: Rectangle) -> raqote::Source<'a> {
                         spread,
                     )
                 }
+<<<<<<< HEAD
                 LinearGradientCoords::Angle {
                     radians,
                     displacement,
@@ -662,6 +685,17 @@ fn brush_to_source<'a>(brush: &Brush, frame: Rectangle) -> raqote::Source<'a> {
                     if rad.is_sign_negative() {
                         rad = (PI * 2.0) - -rad;
                     } else {
+=======
+                GradientCoords::Angle { radians } => {
+                    let mut rad = *radians;
+                    dbg!(rad * 180.0 / PI);
+                    rad += PI / 2.0; // Rotate 90° to make angle 0° point to top
+                    rad = PI * 2.0 - rad; // Invert angle direction to make it clockwise
+                    if rad.is_sign_negative() {
+                        rad = (PI * 2.0) - -rad;
+                    }
+                    else {
+>>>>>>> 2bb30e4b7ea19218982317842e8db54a210db657
                         rad = rad % (PI * 2.0);
                     }
                     let a = frame.width();
@@ -685,6 +719,7 @@ fn brush_to_source<'a>(brush: &Brush, frame: Rectangle) -> raqote::Source<'a> {
                     } else {
                         // -: False
                         z = Point::new((b * rad.cos()) / (2.0 * rad.sin()), b / 2.0);
+<<<<<<< HEAD
                         if rad > c || rad < PI - c {
                             z = -z;
                         }
@@ -693,6 +728,16 @@ fn brush_to_source<'a>(brush: &Brush, frame: Rectangle) -> raqote::Source<'a> {
                     let start = frame.position() + (frame.size() / 2.0) + -z + displacement;
                     let end = frame.position() + (frame.size() / 2.0) + z + displacement;
                     let g_stops = build_gradient(stops, end.distance(start));
+=======
+                        if rad >= PI + c || rad <= PI * 2.0 - c {
+                            z = -z;
+                        }
+                    }
+                    let start = frame.position() + (frame.size() / 2.0) + -z;
+                    let end = frame.position() + (frame.size() / 2.0) + z;
+                    let g_stops = build_gradient(stops, end.distance(start));
+                    dbg!(&g_stops);
+>>>>>>> 2bb30e4b7ea19218982317842e8db54a210db657
                     raqote::Source::new_linear_gradient(
                         raqote::Gradient { stops: g_stops },
                         raqote::Point::new(start.x() as f32, start.y() as f32),
@@ -700,6 +745,7 @@ fn brush_to_source<'a>(brush: &Brush, frame: Rectangle) -> raqote::Source<'a> {
                         spread,
                     )
                 }
+<<<<<<< HEAD
                 LinearGradientCoords::Direction {
                     direction,
                     displacement,
@@ -712,6 +758,15 @@ fn brush_to_source<'a>(brush: &Brush, frame: Rectangle) -> raqote::Source<'a> {
                     let displacement = displacement.pixels(frame.size());
                     start = start + frame.position() + displacement;
                     end = end + frame.position() + displacement;
+=======
+                GradientCoords::Direction(d) => {
+                    let width = frame.width();
+                    let height = frame.height();
+                    let (mut start, mut end) = start_and_end_from_direction(*d, width, height);
+                    let g_stops = build_gradient(&stops, end.distance(start));
+                    start = start + frame.position();
+                    end = end + frame.position();
+>>>>>>> 2bb30e4b7ea19218982317842e8db54a210db657
                     raqote::Source::new_linear_gradient(
                         raqote::Gradient { stops: g_stops },
                         raqote::Point::new(start.x() as f32, start.y() as f32),
@@ -721,6 +776,7 @@ fn brush_to_source<'a>(brush: &Brush, frame: Rectangle) -> raqote::Source<'a> {
                 }
             }
         }
+<<<<<<< HEAD
         Brush::Gradient(Gradient {
             kind: GradientKind::Radial(params),
             stops,
@@ -767,6 +823,8 @@ fn brush_to_source<'a>(brush: &Brush, frame: Rectangle) -> raqote::Source<'a> {
             source
         },
         e@_ => unimplemented!("{:?}", e)
+=======
+>>>>>>> 2bb30e4b7ea19218982317842e8db54a210db657
     }
 }
 
@@ -815,6 +873,7 @@ fn build_gradient(stops: &[GradientStop], length: f64) -> Vec<raqote::GradientSt
     let mut g_stops = Vec::with_capacity(stops.len());
     let mut cursor = 0;
     let mut last_pos = 0.0;
+<<<<<<< HEAD
     while cursor < stops.len() {
         if let Some(pos) = stops[cursor].pos {
             let pos = pos.unit_percent(length).min(1.0);
@@ -866,6 +925,81 @@ fn build_gradient(stops: &[GradientStop], length: f64) -> Vec<raqote::GradientSt
                 break;
             }
             cursor = second_cursor;
+=======
+    dbg!(&stops);
+    while cursor < stops.len() {
+        dbg!(cursor);
+        match stops[cursor].kind {
+            GradientStopKind::Interpolated => {
+                let mut second_cursor = cursor;
+                let mut end = None;
+                while second_cursor < stops.len() {
+                    match stops[second_cursor].kind {
+                        GradientStopKind::Fixed(e) => {
+                            end = Some(e);
+                            break;
+                        }
+                        GradientStopKind::Interpolated => {}
+                        GradientStopKind::Pixels(p) => {
+                            end = Some(p / length);
+                            break;
+                        }
+                    }
+                    dbg!(second_cursor);
+                    second_cursor += 1;
+                }
+                let from_pos = match cursor == 0 {
+                    true => 0.0,
+                    false => match stops[cursor - 1].kind {
+                        GradientStopKind::Fixed(e) => e,
+                        GradientStopKind::Interpolated => unreachable!(),
+                        GradientStopKind::Pixels(p) => p / length,
+                    },
+                };
+                let mut count = (second_cursor - cursor) as f64;
+                let to_pos = match end {
+                    Some(tp) => tp,
+                    None => {
+                        count -= 1.0;
+                        1.0
+                    }
+                };
+                for i in cursor..second_cursor {
+                    let p = (from_pos + (to_pos - from_pos) / count * (i as f64)).min(1.0);
+                    let c = stops[i].color;
+                    g_stops.push(raqote::GradientStop {
+                        position: (p.max(last_pos) as f32),
+                        color: raqote::Color::new(c.a(), c.r(), c.g(), c.b()),
+                    });
+                    last_pos = p;
+                }
+                if end.is_none() {
+                    dbg!(end);
+                    break;
+                }
+                cursor = second_cursor;
+            }
+            GradientStopKind::Fixed(mut pos) => {
+                pos = pos.min(1.0);
+                let c = stops[cursor].color;
+                g_stops.push(raqote::GradientStop {
+                    position: (pos.max(last_pos) as f32),
+                    color: raqote::Color::new(c.a(), c.r(), c.g(), c.b()),
+                });
+                last_pos = pos;
+                cursor += 1;
+            }
+            GradientStopKind::Pixels(pos_in_pixels) => {
+                let pos = (pos_in_pixels / length).min(1.0);
+                let c = stops[cursor].color;
+                g_stops.push(raqote::GradientStop {
+                    position: (pos.max(last_pos) as f32),
+                    color: raqote::Color::new(c.a(), c.r(), c.g(), c.b()),
+                });
+                last_pos = pos;
+                cursor += 1;
+            }
+>>>>>>> 2bb30e4b7ea19218982317842e8db54a210db657
         }
     }
     g_stops
