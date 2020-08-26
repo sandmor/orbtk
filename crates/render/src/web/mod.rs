@@ -5,7 +5,9 @@ use stdweb::{
 };
 
 // pub use crate::image::Image as InnerImage;
-use crate::{utils::*, common::*, FontConfig, PipelineTrait, RenderConfig, RenderTarget, TextMetrics};
+use crate::{
+    common::*, utils::*, FontConfig, PipelineTrait, RenderConfig, RenderTarget, TextMetrics,
+};
 
 pub use self::image::*;
 
@@ -13,7 +15,7 @@ mod image;
 
 #[derive(Debug, Clone)]
 enum SpecialFill {
-    EllipticGradient(RadialGradient, Vec<GradientStop>, bool)
+    EllipticGradient(RadialGradient, Vec<GradientStop>, bool),
 }
 
 /// The RenderContext2D trait, provides the rendering ctx. It is used for drawing shapes, text, images, and other objects.
@@ -52,7 +54,7 @@ impl RenderContext2D {
             background: Color::default(),
             special_fill: None,
             path_rect: PathRectTrack::new(),
-            saved_state: None
+            saved_state: None,
         }
     }
 
@@ -142,8 +144,7 @@ impl RenderContext2D {
         self.fill_style();
         if let Some(fill) = self.special_fill.take() {
             self.special_fill(fill);
-        }
-        else {
+        } else {
             self.canvas_render_context_2_d.fill(FillRule::default());
         }
     }
@@ -170,7 +171,7 @@ impl RenderContext2D {
     /// Adds a rectangle to the current path.
     pub fn rect(&mut self, x: f64, y: f64, width: f64, height: f64) {
         self.canvas_render_context_2_d.rect(x, y, width, height);
-        self.path_rect.rect(x,y, width, height);
+        self.path_rect.rect(x, y, width, height);
     }
 
     /// Creates a circular arc centered at (x, y) with a radius of radius. The path starts at startAngle and ends at endAngle.
@@ -377,7 +378,11 @@ impl RenderContext2D {
 
     /// Saves the entire state of the canvas by pushing the current state onto a stack.
     pub fn save(&mut self) {
-        self.saved_state = Some((self.config.clone(), self.path_rect.clone(), self.special_fill.clone()));
+        self.saved_state = Some((
+            self.config.clone(),
+            self.path_rect.clone(),
+            self.special_fill.clone(),
+        ));
         self.canvas_render_context_2_d.save();
     }
 
@@ -521,16 +526,20 @@ impl RenderContext2D {
                 stops,
                 repeat,
             }) => {
-                self.special_fill = Some(SpecialFill::EllipticGradient(*params, stops.clone(), *repeat));
-            },
-            u@_ => unimplemented!("{:?}", u)
+                self.special_fill = Some(SpecialFill::EllipticGradient(
+                    *params,
+                    stops.clone(),
+                    *repeat,
+                ));
+            }
+            u @ _ => unimplemented!("{:?}", u),
         }
     }
 
     fn special_fill(&mut self, fill: SpecialFill) {
         let path_rect = match self.path_rect.get_rect() {
             Some(pr) => pr,
-            None => return
+            None => return,
         };
         let mut img = Vec::new();
         let width = path_rect.width() as u32;
@@ -538,7 +547,7 @@ impl RenderContext2D {
         // We have to generate an image because we want to use the clip() function of the canvas and this does not work with putImageData()
         img.push(b'B');
         img.push(b'M');
-        img.extend_from_slice(&[0; 4+2+2+4]);
+        img.extend_from_slice(&[0; 4 + 2 + 2 + 4]);
         // DIB Header
         // Using BITMAPINFOHEADER
         img.extend_from_slice(&u32::to_le_bytes(40)[..]);
@@ -547,7 +556,7 @@ impl RenderContext2D {
         img.extend_from_slice(&u16::to_le_bytes(1)[..]); // Color planes
         img.extend_from_slice(&u16::to_le_bytes(32)[..]); // Bits per pixel
         img.extend_from_slice(&u32::to_le_bytes(0)[..]); // Compression method(none)
-        img.extend_from_slice(&u32::to_le_bytes(4*width*height)[..]); // Uncompressed image size
+        img.extend_from_slice(&u32::to_le_bytes(4 * width * height)[..]); // Uncompressed image size
         img.extend_from_slice(&u32::to_le_bytes(1)[..]); // Horizontal PPM
         img.extend_from_slice(&u32::to_le_bytes(1)[..]); // Vertical PPM
         img.extend_from_slice(&u32::to_le_bytes(0)[..]);
@@ -560,10 +569,14 @@ impl RenderContext2D {
                         img.extend_from_slice(&[255, 0, 128, 128]);
                     }
                 }
-            },
+            }
         }
         self.clip();
-        let image = Image::from_path(format!("data:image/bmp;base64,{}", base64::encode(&img[..]))).unwrap();
+        let image = Image::from_path(format!(
+            "data:image/bmp;base64,{}",
+            base64::encode(&img[..])
+        ))
+        .unwrap();
         self.draw_image(&image, path_rect.x(), path_rect.y());
     }
 
@@ -590,7 +603,7 @@ impl RenderContext2D {
                 self.canvas_render_context_2_d
                     .set_stroke_style_gradient(&web_gradient);
             }*/
-            _ => unimplemented!("{:?}", brush)
+            _ => unimplemented!("{:?}", brush),
         }
     }
 }

@@ -18,7 +18,7 @@ pub fn arc_rect(x: f64, y: f64, radius: f64, start_angle: f64, end_angle: f64) -
                 1 => (0.0, 1.0),
                 2 => (-1.0, 0.0),
                 3 => (0.0, -1.0),
-                _ => break
+                _ => break,
             };
             start_x = start_x.min(x);
             start_y = start_y.min(y);
@@ -32,7 +32,7 @@ pub fn arc_rect(x: f64, y: f64, radius: f64, start_angle: f64, end_angle: f64) -
     start_y = y + start_y * radius;
     end_x = x + end_x * radius;
     end_y = y + end_y * radius;
-    Rectangle::new((start_x, start_y), (end_x-start_x, end_y-start_y))
+    Rectangle::new((start_x, start_y), (end_x - start_x, end_y - start_y))
 }
 
 pub fn quad_rect(p0: Point, p1: Point, p2: Point) -> Rectangle {
@@ -46,7 +46,7 @@ pub fn quad_rect(p0: Point, p1: Point, p2: Point) -> Rectangle {
         mi = mi.min(q);
         ma = ma.max(q);
     }
-    Rectangle::new(mi, Size::new(ma.x()-mi.x(), ma.y()-mi.y()))
+    Rectangle::new(mi, Size::new(ma.x() - mi.x(), ma.y() - mi.y()))
 }
 
 pub fn cubic_rect(p0: Point, p1: Point, p2: Point, p3: Point) -> Rectangle {
@@ -83,7 +83,7 @@ pub fn cubic_rect(p0: Point, p1: Point, p2: Point, p3: Point) -> Rectangle {
             ma.set_y(ma.y().max(q1.y().max(q2.y())));
         }
     }
-    Rectangle::new(mi, Size::new(ma.x()-mi.x(), ma.y()-mi.y()))
+    Rectangle::new(mi, Size::new(ma.x() - mi.x(), ma.y() - mi.y()))
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -113,8 +113,7 @@ impl PathRectTrack {
             let r = Rectangle::new((x, y), (width, height));
             if let Some(ref mut path_rect) = self.path_rect {
                 path_rect.join_with_rectangle(&r);
-            }
-            else {
+            } else {
                 self.path_rect = Some(r);
             }
             self.last_path_point = Point::new(x, y);
@@ -129,8 +128,7 @@ impl PathRectTrack {
             let r = arc_rect(x, y, radius, start_angle, end_angle);
             if let Some(ref mut path_rect) = self.path_rect {
                 path_rect.join_with_rectangle(&r);
-            }
-            else {
+            } else {
                 self.path_rect = Some(r);
             }
             let (mut end_y, mut end_x) = f64::sin_cos(end_angle);
@@ -147,8 +145,7 @@ impl PathRectTrack {
         if !self.is_the_path_rect_fixed {
             if let Some(ref mut path_rect) = self.path_rect {
                 path_rect.join_with_point(&Point::new(x, y));
-            }
-            else {
+            } else {
                 self.path_rect = Some(Rectangle::new(Point::new(x, y), (0.0, 0.0)));
             }
             self.last_path_point = Point::new(x, y);
@@ -163,8 +160,7 @@ impl PathRectTrack {
             let r = quad_rect(self.last_path_point, Point::new(cpx, cpy), Point::new(x, y));
             if let Some(ref mut path_rect) = self.path_rect {
                 path_rect.join_with_rectangle(&r);
-            }
-            else {
+            } else {
                 self.path_rect = Some(r);
             }
             self.last_path_point = Point::new(x, y);
@@ -176,11 +172,15 @@ impl PathRectTrack {
 
     pub fn bezier_curve_to(&mut self, cp1x: f64, cp1y: f64, cp2x: f64, cp2y: f64, x: f64, y: f64) {
         if !self.is_the_path_rect_fixed {
-            let r = cubic_rect(self.last_path_point, Point::new(cp1x, cp1y), Point::new(cp2x, cp2y), Point::new(x, y));
+            let r = cubic_rect(
+                self.last_path_point,
+                Point::new(cp1x, cp1y),
+                Point::new(cp2x, cp2y),
+                Point::new(x, y),
+            );
             if let Some(ref mut path_rect) = self.path_rect {
                 path_rect.join_with_rectangle(&r);
-            }
-            else {
+            } else {
                 self.path_rect = Some(r);
             }
             self.last_path_point = Point::new(x, y);

@@ -154,7 +154,6 @@ impl From<&str> for Color {
                     Err(_) => 0,
                 };
 
-<<<<<<< HEAD
                 let mut b = (d & 0xF) << 4;
                 let mut g = ((d >> 4) & 0xF) << 4;
                 let mut r = ((d >> 8) & 0xF) << 4;
@@ -166,15 +165,6 @@ impl From<&str> for Color {
                 g |= g >> 4;
                 b |= b >> 4;
                 a |= a >> 4;
-=======
-                let b = (d & 0xF) << 4;
-                let g = ((d >> 4) & 0xF) << 4;
-                let r = ((d >> 8) & 0xF) << 4;
-                let a = match clean_hex.len() == 4 {
-                    true => ((d >> 12) & 0xF) << 4,
-                    false => 0xFF,
-                };
->>>>>>> 2bb30e4b7ea19218982317842e8db54a210db657
 
                 Color::rgba(r as u8, g as u8, b as u8, a as u8)
             }

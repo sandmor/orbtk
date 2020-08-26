@@ -160,7 +160,6 @@ alabaster #fafafa
 alto #dadada
 fiord #475b6e
 manatee #949ca5
-<<<<<<< HEAD
 gorduroy #586864
 bluebayoux #516475
 bombay #afb1b8
@@ -170,6 +169,3 @@ manz #e5e552
 sandwisp #dec982
 dolly #ffff81
 goldenfizz #ebde31
-=======
-gorduroy #586864
->>>>>>> 2bb30e4b7ea19218982317842e8db54a210db657

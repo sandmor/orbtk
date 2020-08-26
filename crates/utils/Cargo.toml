@@ -18,8 +18,4 @@ derive_more = { version = "0.99", default-features = false, features = ["add", "
 
 
 [build-dependencies]
-<<<<<<< HEAD
 phf_codegen = { version = "0.8", default-features = false }
-=======
-phf_codegen = { version = "0.8", default-features = false }
->>>>>>> 2bb30e4b7ea19218982317842e8db54a210db657

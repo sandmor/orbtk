@@ -19,11 +19,9 @@ impl Property {
         }
         if brushes.is_empty() {
             None
-        }
-        else if brushes.len() == 1 {
+        } else if brushes.len() == 1 {
             Some(brushes.first().unwrap().clone())
-        }
-        else {
+        } else {
             Some(Brush::Stacked(brushes))
         }
     }

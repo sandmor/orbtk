@@ -122,10 +122,10 @@ impl Rectangle {
             self.set_height(self.height() + self.y() - other.y());
             self.set_y(other.y());
         }
-        if other.x()+other.width() > self.x() + self.width() {
+        if other.x() + other.width() > self.x() + self.width() {
             self.set_width(other.x() + other.width() - self.x());
         }
-        if other.y()+other.height() > self.y() + self.height() {
+        if other.y() + other.height() > self.y() + self.height() {
             self.set_height(other.y() + other.height() - self.y());
         }
     }

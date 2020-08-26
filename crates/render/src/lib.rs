@@ -2,8 +2,8 @@
 
 use std::{any::Any, fmt};
 
-pub mod prelude;
 mod common;
+pub mod prelude;
 
 pub use orbtk_utils::prelude as utils;
 
