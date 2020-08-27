@@ -158,15 +158,15 @@ impl RenderPipeline for Graphic2DPipeline {
             }),
             stops: vec![
                 GradientStop {
-                    pos: 0.0,
+                    pos: OnLinePos::from_unit_percent(0.0),
                     color: Color::from("#0021EB"),
                 },
                 GradientStop {
-                    pos: 0.5,
+                    pos: OnLinePos::from_unit_percent(0.5),
                     color: Color::from("#CE2F24"),
                 },
                 GradientStop {
-                    pos: 1.0,
+                    pos: OnLinePos::from_unit_percent(1.0),
                     color: Color::from("#70EF49"),
                 },
             ],

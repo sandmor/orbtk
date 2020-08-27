@@ -39,7 +39,7 @@ pub const REDOX_THEME_RON: &str = include_str!("../assets/redox/redox.ron");
     not(target_os = "redox")
 ))]
 pub fn default_theme() -> Theme {
-    light_theme()
+    dark_theme()
 }
 
 #[cfg(feature = "light")]

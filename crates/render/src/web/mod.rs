@@ -9,6 +9,13 @@ use crate::{
     common::*, utils::*, FontConfig, PipelineTrait, RenderConfig, RenderTarget, TextMetrics,
 };
 
+macro_rules! println {
+    ($($tt:tt)*) => {{
+        let msg = format!($($tt)*);
+        js! { console.log(@{ msg }) }
+    }}
+}
+
 pub use self::image::*;
 
 mod image;
@@ -509,18 +516,16 @@ impl RenderContext2D {
                 self.canvas_render_context_2_d
                     .set_fill_style_gradient(&web_gradient);
             }*/
-            /*Brush::Gradient(Gradient {
+            Brush::Gradient(Gradient {
                 kind: GradientKind::Linear(coords),
                 stops,
                 repeat,
             }) => {
                 let web_gradient = match coords {
-                    LinearGradientCoords::Ends { start, end } => {
-                        todo!()
-                    }
+                    _ => todo!(),
                 };
                 todo!();
-            }*/
+            }
             Brush::Gradient(Gradient {
                 kind: GradientKind::Radial(params),
                 stops,
@@ -531,6 +536,7 @@ impl RenderContext2D {
                     stops.clone(),
                     *repeat,
                 ));
+                println!("Special fill");
             }
             u @ _ => unimplemented!("{:?}", u),
         }
@@ -541,42 +547,39 @@ impl RenderContext2D {
             Some(pr) => pr,
             None => return,
         };
-        let mut img = Vec::new();
-        let width = path_rect.width() as u32;
-        let height = path_rect.height() as u32;
-        // We have to generate an image because we want to use the clip() function of the canvas and this does not work with putImageData()
-        img.push(b'B');
-        img.push(b'M');
-        img.extend_from_slice(&[0; 4 + 2 + 2 + 4]);
-        // DIB Header
-        // Using BITMAPINFOHEADER
-        img.extend_from_slice(&u32::to_le_bytes(40)[..]);
-        img.extend_from_slice(&i32::to_le_bytes(width as i32)[..]);
-        img.extend_from_slice(&i32::to_le_bytes(height as i32)[..]);
-        img.extend_from_slice(&u16::to_le_bytes(1)[..]); // Color planes
-        img.extend_from_slice(&u16::to_le_bytes(32)[..]); // Bits per pixel
-        img.extend_from_slice(&u32::to_le_bytes(0)[..]); // Compression method(none)
-        img.extend_from_slice(&u32::to_le_bytes(4 * width * height)[..]); // Uncompressed image size
-        img.extend_from_slice(&u32::to_le_bytes(1)[..]); // Horizontal PPM
-        img.extend_from_slice(&u32::to_le_bytes(1)[..]); // Vertical PPM
-        img.extend_from_slice(&u32::to_le_bytes(0)[..]);
-        img.extend_from_slice(&u32::to_le_bytes(0)[..]);
+        let mut img = String::new();
         match fill {
             SpecialFill::EllipticGradient(_gradient, _stops, _repeat) => {
-                for y in 0..height {
-                    let _h = height - y;
-                    for _x in 0..width {
-                        img.extend_from_slice(&[255, 0, 128, 128]);
-                    }
-                }
+                img.push_str(
+                    "<?xml version=\"1.0\" encoding=\"UTF-8\" \
+                    standalone=\"no\"?>\n",
+                );
+                img.push_str(
+                    &format!(
+                        "<svg version=\"1.1\" viewBox=\"0 {height} {width} \
+                        {height}\" width=\"{width}px\" height=\"{height}px\">\n",
+                        width = path_rect.width(),
+                        height = path_rect.height()
+                    )[..],
+                );
+                img.push_str("<g>");
+                img.push_str(&format!(
+                    "<rect x=\"0\" y=\"{height}\" \
+                    width=\"{width}\" height=\"{height}\" fill=\"red\" />\n",
+                    width = path_rect.width(),
+                    height = path_rect.height()
+                ));
+                img.push_str("</g>");
+                img.push_str("</svg>\n");
             }
         }
         self.clip();
         let image = Image::from_path(format!(
-            "data:image/bmp;base64,{}",
-            base64::encode(&img[..])
+            "data:image/svg+xml;base64,{}",
+            base64::encode(img.as_bytes())
         ))
         .unwrap();
+        println!("Hello");
         self.draw_image(&image, path_rect.x(), path_rect.y());
     }
 

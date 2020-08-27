@@ -616,6 +616,10 @@ impl OnLinePos {
         OnLinePos { pos, kind }
     }
 
+    pub fn from_unit_percent(pos: f64) -> OnLinePos {
+        Self::new(pos * 100.0, OnLinePosKind::Percentage)
+    }
+
     pub fn pos(&self) -> f64 {
         self.pos
     }
