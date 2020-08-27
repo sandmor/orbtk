@@ -95,12 +95,12 @@ pub struct PathRectTrack {
 }
 
 impl PathRectTrack {
-    pub fn new() -> PathRectTrack {
+    pub fn new(clip: bool) -> PathRectTrack {
         PathRectTrack {
             path_rect: None,
             last_path_point: Point::new(0.0, 0.0),
             first_path_point: None,
-            is_the_path_rect_fixed: false,
+            is_the_path_rect_fixed: clip,
         }
     }
 
@@ -108,7 +108,7 @@ impl PathRectTrack {
         self.last_path_point = self.first_path_point.unwrap_or(Point::new(0.0, 0.0));
     }
 
-    pub fn rect(&mut self, x: f64, y: f64, width: f64, height: f64) {
+    pub fn record_rect(&mut self, x: f64, y: f64, width: f64, height: f64) {
         if !self.is_the_path_rect_fixed {
             let r = Rectangle::new((x, y), (width, height));
             if let Some(ref mut path_rect) = self.path_rect {
@@ -123,7 +123,7 @@ impl PathRectTrack {
         }
     }
 
-    pub fn arc(&mut self, x: f64, y: f64, radius: f64, start_angle: f64, end_angle: f64) {
+    pub fn record_arc(&mut self, x: f64, y: f64, radius: f64, start_angle: f64, end_angle: f64) {
         if !self.is_the_path_rect_fixed {
             let r = arc_rect(x, y, radius, start_angle, end_angle);
             if let Some(ref mut path_rect) = self.path_rect {
@@ -141,7 +141,7 @@ impl PathRectTrack {
         }
     }
 
-    pub fn insert_point_at(&mut self, x: f64, y: f64) {
+    pub fn record_point_at(&mut self, x: f64, y: f64) {
         if !self.is_the_path_rect_fixed {
             if let Some(ref mut path_rect) = self.path_rect {
                 path_rect.join_with_point(&Point::new(x, y));
@@ -155,7 +155,7 @@ impl PathRectTrack {
         }
     }
 
-    pub fn quadratic_curve_to(&mut self, cpx: f64, cpy: f64, x: f64, y: f64) {
+    pub fn record_quadratic_curve_to(&mut self, cpx: f64, cpy: f64, x: f64, y: f64) {
         if !self.is_the_path_rect_fixed {
             let r = quad_rect(self.last_path_point, Point::new(cpx, cpy), Point::new(x, y));
             if let Some(ref mut path_rect) = self.path_rect {
@@ -170,7 +170,7 @@ impl PathRectTrack {
         }
     }
 
-    pub fn bezier_curve_to(&mut self, cp1x: f64, cp1y: f64, cp2x: f64, cp2y: f64, x: f64, y: f64) {
+    pub fn record_bezier_curve_to(&mut self, cp1x: f64, cp1y: f64, cp2x: f64, cp2y: f64, x: f64, y: f64) {
         if !self.is_the_path_rect_fixed {
             let r = cubic_rect(
                 self.last_path_point,
@@ -190,8 +190,12 @@ impl PathRectTrack {
         }
     }
 
-    pub fn clip(&mut self) {
-        self.is_the_path_rect_fixed = true;
+    pub fn set_clip(&mut self, clip: bool) {
+        self.is_the_path_rect_fixed = clip;
+    }
+
+    pub fn get_clip(&mut self) -> bool {
+        self.is_the_path_rect_fixed
     }
 
     pub fn get_rect(&self) -> Option<Rectangle> {

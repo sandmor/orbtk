@@ -42,7 +42,7 @@ impl RenderContext2D {
             last_rect: Rectangle::new((0.0, 0.0), (width, height)),
             clip_rect: None,
             background: Color::default(),
-            path_rect: PathRectTrack::new(),
+            path_rect: PathRectTrack::new(false),
             saved_state: None,
         }
     }
@@ -204,7 +204,7 @@ impl RenderContext2D {
             ops: Vec::new(),
             winding: raqote::Winding::NonZero,
         };
-        self.path_rect = PathRectTrack::new();
+        self.path_rect = PathRectTrack::new(self.path_rect.get_clip());
     }
 
     /// Attempts to add a straight line from the current point to the start of the current sub-path. If the shape has already been closed or has only one point, this function does nothing.
@@ -221,7 +221,7 @@ impl RenderContext2D {
         let mut path_builder = raqote::PathBuilder::from(self.path.clone());
         path_builder.rect(x as f32, y as f32, width as f32, height as f32);
         self.path = path_builder.finish();
-        self.path_rect.rect(x, y, width, height);
+        self.path_rect.record_rect(x, y, width, height);
     }
 
     /// Creates a circular arc centered at (x, y) with a radius of radius. The path starts at startAngle and ends at endAngle.
@@ -235,7 +235,7 @@ impl RenderContext2D {
             end_angle as f32,
         );
         self.path = path_builder.finish();
-        self.path_rect.arc(x, y, radius, start_angle, end_angle);
+        self.path_rect.record_arc(x, y, radius, start_angle, end_angle);
     }
 
     /// Begins a new sub-path at the point specified by the given {x, y} coordinates.
@@ -244,7 +244,7 @@ impl RenderContext2D {
         let mut path_builder = raqote::PathBuilder::from(self.path.clone());
         path_builder.move_to(x as f32, y as f32);
         self.path = path_builder.finish();
-        self.path_rect.insert_point_at(x, y);
+        self.path_rect.record_point_at(x, y);
     }
 
     /// Adds a straight line to the current sub-path by connecting the sub-path's last point to the specified {x, y} coordinates.
@@ -252,7 +252,7 @@ impl RenderContext2D {
         let mut path_builder = raqote::PathBuilder::from(self.path.clone());
         path_builder.line_to(x as f32, y as f32);
         self.path = path_builder.finish();
-        self.path_rect.insert_point_at(x, y);
+        self.path_rect.record_point_at(x, y);
     }
 
     /// Adds a quadratic Bézier curve to the current sub-path.
@@ -260,7 +260,7 @@ impl RenderContext2D {
         let mut path_builder = raqote::PathBuilder::from(self.path.clone());
         path_builder.quad_to(cpx as f32, cpy as f32, x as f32, y as f32);
         self.path = path_builder.finish();
-        self.path_rect.quadratic_curve_to(cpx, cpy, x, y);
+        self.path_rect.record_quadratic_curve_to(cpx, cpy, x, y);
     }
 
     /// Adds a cubic Bézier curve to the current sub-path.
@@ -276,7 +276,7 @@ impl RenderContext2D {
             x as f32,
             y as f32,
         );
-        self.path_rect.bezier_curve_to(cp1x, cp1y, cp2x, cp2y, x, y);
+        self.path_rect.record_bezier_curve_to(cp1x, cp1y, cp2x, cp2y, x, y);
     }
 
     /// Draws a render target.
@@ -361,7 +361,7 @@ impl RenderContext2D {
         self.clip_rect = Some(self.last_rect);
         self.clip = true;
         self.draw_target.push_clip(&self.path);
-        self.path_rect.clip();
+        self.path_rect.set_clip(self.clip);
     }
 
     // Line styles

@@ -60,7 +60,7 @@ impl RenderContext2D {
             export_data,
             background: Color::default(),
             special_fill: None,
-            path_rect: PathRectTrack::new(),
+            path_rect: PathRectTrack::new(false),
             saved_state: None,
         }
     }
@@ -85,7 +85,7 @@ impl RenderContext2D {
             font_config: FontConfig::default(),
             export_data,
             background: Color::default(),
-            path_rect: PathRectTrack::new(),
+            path_rect: PathRectTrack::new(false),
             special_fill: None,
             saved_state: None,
         }
@@ -165,7 +165,7 @@ impl RenderContext2D {
     /// Starts a new path by emptying the list of sub-paths. Call this when you want to create a new path.
     pub fn begin_path(&mut self) {
         self.canvas_render_context_2_d.begin_path();
-        self.path_rect = PathRectTrack::new();
+        self.path_rect = PathRectTrack::new(self.path_rect.get_clip());
     }
 
     /// Attempts to add a straight line from the current point to the start of the current sub-path.
@@ -178,34 +178,34 @@ impl RenderContext2D {
     /// Adds a rectangle to the current path.
     pub fn rect(&mut self, x: f64, y: f64, width: f64, height: f64) {
         self.canvas_render_context_2_d.rect(x, y, width, height);
-        self.path_rect.rect(x, y, width, height);
+        self.path_rect.record_rect(x, y, width, height);
     }
 
     /// Creates a circular arc centered at (x, y) with a radius of radius. The path starts at startAngle and ends at endAngle.
     pub fn arc(&mut self, x: f64, y: f64, radius: f64, start_angle: f64, end_angle: f64) {
         self.canvas_render_context_2_d
             .arc(x, y, radius, start_angle, end_angle, false);
-        self.path_rect.arc(x, y, radius, start_angle, end_angle);
+        self.path_rect.record_arc(x, y, radius, start_angle, end_angle);
     }
 
     /// Begins a new sub-path at the point specified by the given {x, y} coordinates.
 
     pub fn move_to(&mut self, x: f64, y: f64) {
         self.canvas_render_context_2_d.move_to(x, y);
-        self.path_rect.insert_point_at(x, y);
+        self.path_rect.record_point_at(x, y);
     }
 
     /// Adds a straight line to the current sub-path by connecting the sub-path's last point to the specified {x, y} coordinates.
     pub fn line_to(&mut self, x: f64, y: f64) {
         self.canvas_render_context_2_d.line_to(x, y);
-        self.path_rect.insert_point_at(x, y);
+        self.path_rect.record_point_at(x, y);
     }
 
     /// Adds a quadratic Bézier curve to the current sub-path.
     pub fn quadratic_curve_to(&mut self, cpx: f64, cpy: f64, x: f64, y: f64) {
         self.canvas_render_context_2_d
             .quadratic_curve_to(cpx, cpy, x, y);
-        self.path_rect.quadratic_curve_to(cpx, cpy, x, y);
+        self.path_rect.record_quadratic_curve_to(cpx, cpy, x, y);
     }
 
     /// Adds a cubic Bézier curve to the current sub-path.
@@ -214,7 +214,7 @@ impl RenderContext2D {
     pub fn bezier_curve_to(&mut self, cp1x: f64, cp1y: f64, cp2x: f64, cp2y: f64, x: f64, y: f64) {
         self.canvas_render_context_2_d
             .bezier_curve_to(cp1x, cp1y, cp2x, cp2y, x, y);
-        self.path_rect.bezier_curve_to(cp1x, cp1y, cp2x, cp2y, x, y);
+        self.path_rect.record_bezier_curve_to(cp1x, cp1y, cp2x, cp2y, x, y);
     }
 
     // Draw image
@@ -237,7 +237,7 @@ impl RenderContext2D {
                     }
                 )
             } else {
-                //  @{&self.canvas_render_context_2_d}.drawImage(img, @{&x}, @{&y});
+                @{&self.canvas_render_context_2_d}.drawImage(img, @{&x}, @{&y});
             }
         );
     }
@@ -321,7 +321,7 @@ impl RenderContext2D {
     /// Creates a clipping path from the current sub-paths. Everything drawn after clip() is called appears inside the clipping path only.
     pub fn clip(&mut self) {
         self.canvas_render_context_2_d.clip(FillRule::EvenOdd);
-        self.path_rect.clip();
+        self.path_rect.set_clip(true);
     }
 
     // Line styles
@@ -556,16 +556,28 @@ impl RenderContext2D {
                 );
                 img.push_str(
                     &format!(
-                        "<svg version=\"1.1\" viewBox=\"0 {height} {width} \
+                        "<svg 
+                        xmlns:dc=\"http://purl.org/dc/elements/1.1/\" \
+                        xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\" \
+                        xmlns:svg=\"http://www.w3.org/2000/svg\" \
+                        xmlns=\"http://www.w3.org/2000/svg\" \
+                        xmlns:xlink=\"http://www.w3.org/1999/xlink\" \
+                        version=\"1.1\" viewBox=\"0 {height} {width} \
                         {height}\" width=\"{width}px\" height=\"{height}px\">\n",
                         width = path_rect.width(),
                         height = path_rect.height()
                     )[..],
                 );
+                img.push_str("<defs>");
+                img.push_str("<radialGradient id=\"gradientDefinition\">");
+                img.push_str("<stop stop-color=\"yellow\" offset=\"0%\" stop-opacity=\"0\" />");
+                img.push_str("<stop stop-color=\"red\" offset=\"100%\" stop-opacity=\"1\" />");
+                img.push_str("</radialGradient>");
+                img.push_str("</defs>");
                 img.push_str("<g>");
                 img.push_str(&format!(
-                    "<rect x=\"0\" y=\"{height}\" \
-                    width=\"{width}\" height=\"{height}\" fill=\"red\" />\n",
+                    "<rect x=\"0\" y=\"{height}\" width=\"{width}\" \
+                    height=\"{height}\" style=\"fill:url(#gradientDefinition)\" />\n",
                     width = path_rect.width(),
                     height = path_rect.height()
                 ));
@@ -573,14 +585,16 @@ impl RenderContext2D {
                 img.push_str("</svg>\n");
             }
         }
-        self.clip();
+        self.canvas_render_context_2_d.save();
+        self.canvas_render_context_2_d.clip(FillRule::EvenOdd);
         let image = Image::from_path(format!(
             "data:image/svg+xml;base64,{}",
             base64::encode(img.as_bytes())
         ))
         .unwrap();
-        println!("Hello");
         self.draw_image(&image, path_rect.x(), path_rect.y());
+        self.canvas_render_context_2_d.restore();
+        println!("So we draw the gradient, right?");
     }
 
     fn stroke_style<'a>(&self, brush: &Brush) {
