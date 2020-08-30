@@ -30,7 +30,10 @@ pathfinder_gl = { version = "0.5", optional = true }
 pathfinder_gpu =  { version = "0.5", optional = true }
 pathfinder_renderer = { version = "0.5", optional = true }
 pathfinder_resources =  { version = "0.5", optional = true }
-font-kit = { version = "0.6", optional = true }
+
+[target.'cfg(all(not(target_arch = "wasm32"), not(target_os = "redox")))'.dependencies]
+skia-safe = { version = "0", optional = true }
+font-kit = { version = "0.10", optional = true }
 
 [dependencies]
 orbtk_utils = { path = "../utils", version = "0.3.1-alpha4" }
@@ -46,5 +49,9 @@ glupath = [
     "pathfinder_gpu",
     "pathfinder_renderer",
     "pathfinder_resources",
+    "font-kit"
+]
+skia = [
+    "skia-safe",
     "font-kit"
 ]

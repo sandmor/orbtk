@@ -19,22 +19,31 @@ pub use self::platform::*;
 #[cfg(all(
     not(target_arch = "wasm32"),
     feature = "default",
-    not(feature = "glupath")
+    not(feature = "glupath"),
+    not(feature = "skia")
 ))]
 #[path = "raqote/mod.rs"]
 pub mod platform;
 
 #[cfg(all(
     not(target_arch = "wasm32"),
-    feature = "default",
+    feature = "skia",
     not(feature = "glupath")
+))]
+#[path = "skia/mod.rs"]
+pub mod platform;
+
+#[cfg(all(
+    not(target_arch = "wasm32"),
+    any(feature = "default", feature = "skia"),
+    not(feature = "glupath"),
 ))]
 pub mod concurrent;
 
 #[cfg(all(
     not(target_arch = "wasm32"),
-    feature = "default",
-    not(feature = "glupath")
+    any(feature = "default", feature = "skia"),
+    not(feature = "glupath"),
 ))]
 pub use self::concurrent::*;
 
