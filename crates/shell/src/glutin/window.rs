@@ -11,6 +11,41 @@ use crate::{
     WindowRequest,
 };
 
+#[cfg(feature = "skia")]
+use skia_safe::{
+    gpu::{gl::FramebufferInfo, BackendRenderTarget, SurfaceOrigin},
+    ColorType, Surface,
+};
+
+#[cfg(feature = "skia")]
+pub fn create_surface(
+    windowed_context: &ContextWrapper<glutin::PossiblyCurrent, glutin::window::Window>,
+    fb_info: &FramebufferInfo,
+    gr_context: &mut skia_safe::gpu::Context,
+) -> skia_safe::Surface {
+    use std::convert::TryInto;
+    let pixel_format = windowed_context.get_pixel_format();
+    let size = windowed_context.window().inner_size();
+    let backend_render_target = BackendRenderTarget::new_gl(
+        (
+            size.width.try_into().unwrap(),
+            size.height.try_into().unwrap(),
+        ),
+        pixel_format.multisampling.map(|s| s.try_into().unwrap()),
+        pixel_format.stencil_bits.try_into().unwrap(),
+        *fb_info,
+    );
+    Surface::from_backend_render_target(
+        gr_context,
+        &backend_render_target,
+        SurfaceOrigin::BottomLeft,
+        ColorType::RGBA8888,
+        None,
+        None,
+    )
+    .unwrap()
+}
+
 /// Represents a wrapper for a glutin window. It handles events, propagate them to
 /// the window adapter and handles the update and redraw pipeline.
 pub struct Window<A>
@@ -26,12 +61,17 @@ where
     close: bool,
     mouse_pos: (f64, f64),
     scale_factor: f64,
+    #[cfg(feature = "skia")]
+    fb_info: FramebufferInfo,
+    #[cfg(feature = "skia")]
+    gr_context: skia_safe::gpu::Context,
 }
 
 impl<A> Window<A>
 where
     A: WindowAdapter,
 {
+    #[cfg(not(feature = "skia"))]
     pub fn new(
         gl_context: ContextWrapper<PossiblyCurrent, window::Window>,
         adapter: A,
@@ -52,6 +92,34 @@ where
             close: false,
             mouse_pos: (0., 0.),
             scale_factor,
+        }
+    }
+
+    #[cfg(feature = "skia")]
+    pub fn new(
+        gl_context: ContextWrapper<PossiblyCurrent, window::Window>,
+        adapter: A,
+        render_context: RenderContext2D,
+        request_receiver: Option<mpsc::Receiver<WindowRequest>>,
+        scale_factor: f64,
+        fb_info: FramebufferInfo,
+        gr_context: skia_safe::gpu::Context,
+    ) -> Self {
+        let mut adapter = adapter;
+        adapter.set_raw_window_handle(gl_context.window().raw_window_handle());
+
+        Window {
+            gl_context,
+            adapter,
+            render_context,
+            request_receiver,
+            update: true,
+            redraw: true,
+            close: false,
+            mouse_pos: (0., 0.),
+            scale_factor,
+            fb_info,
+            gr_context,
         }
     }
 }
@@ -95,7 +163,14 @@ where
                     return;
                 }
                 self.adapter.resize(s.width as f64, s.height as f64);
+                #[cfg(not(feature = "skia"))]
                 self.render_context.resize(s.width as f64, s.height as f64);
+                #[cfg(feature = "skia")]
+                self.render_context.resize(
+                    create_surface(&self.gl_context, &self.fb_info, &mut self.gr_context),
+                    s.width as f64,
+                    s.height as f64,
+                );
                 self.update = true;
                 *control_flow = ControlFlow::Wait;
             }

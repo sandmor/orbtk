@@ -41,7 +41,6 @@ pub mod platform;
 ))]
 pub mod concurrent;
 
-
 #[cfg(all(
     not(target_arch = "wasm32"),
     feature = "default",

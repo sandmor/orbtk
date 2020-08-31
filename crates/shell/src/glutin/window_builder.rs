@@ -1,13 +1,15 @@
 use std::{collections::HashMap, sync::mpsc, sync::Arc};
 
+#[cfg(feature = "skia")]
+use fnv::FnvHashMap;
+#[cfg(feature = "glupath")]
+use font_kit::handle::Handle;
+#[cfg(feature = "glupath")]
+use glutin::GlRequest;
 use glutin::{
     dpi::{LogicalSize, PhysicalSize},
     window, ContextBuilder, GlProfile,
 };
-#[cfg(feature = "glupath")]
-use glutin::GlRequest;
-#[cfg(feature = "glupath")]
-use font_kit::handle::Handle;
 #[cfg(feature = "glupath")]
 use pathfinder_color::ColorF;
 #[cfg(feature = "glupath")]
@@ -22,9 +24,12 @@ use pathfinder_renderer::gpu::{
 #[cfg(feature = "glupath")]
 use pathfinder_resources::embedded::EmbeddedResourceLoader;
 #[cfg(feature = "skia")]
-use skia_safe::{Data, Color, ColorType, Surface, gpu::{BackendRenderTarget, SurfaceOrigin, gl::FramebufferInfo}, typeface::Typeface, font::Font};
-#[cfg(feature = "skia")]
-use fnv::FnvHashMap;
+use skia_safe::{
+    font::Font,
+    gpu::{gl::FramebufferInfo, BackendRenderTarget, SurfaceOrigin},
+    typeface::Typeface,
+    Color, ColorType, Data, Surface,
+};
 
 use super::{Shell, Window};
 
@@ -134,9 +139,8 @@ where
     #[cfg(feature = "skia")]
     /// Builds the window shell and add it to the application `Shell`.
     pub fn build(self) {
-        type WindowedContext = glutin::ContextWrapper<glutin::PossiblyCurrent, glutin::window::Window>;
-        use std::convert::TryInto;
         use gl::types::GLint;
+        use std::convert::TryInto;
 
         let windowed_context = ContextBuilder::new()
             .with_gl_profile(GlProfile::Core)
@@ -165,40 +169,8 @@ where
             }
         };
 
-        windowed_context
-            .window()
-            .set_inner_size(glutin::dpi::Size::new(glutin::dpi::LogicalSize::new(
-                1024.0, 1024.0,
-            )));
-
-        fn create_surface(
-            windowed_context: &WindowedContext,
-            fb_info: &FramebufferInfo,
-            gr_context: &mut skia_safe::gpu::Context,
-        ) -> skia_safe::Surface {
-            let pixel_format = windowed_context.get_pixel_format();
-            let size = windowed_context.window().inner_size();
-            let backend_render_target = BackendRenderTarget::new_gl(
-                (
-                    size.width.try_into().unwrap(),
-                    size.height.try_into().unwrap(),
-                ),
-                pixel_format.multisampling.map(|s| s.try_into().unwrap()),
-                pixel_format.stencil_bits.try_into().unwrap(),
-                *fb_info,
-            );
-            Surface::from_backend_render_target(
-                gr_context,
-                &backend_render_target,
-                SurfaceOrigin::BottomLeft,
-                ColorType::RGBA8888,
-                None,
-                None,
-            )
-            .unwrap()
-        };
-
-        let mut surface = create_surface(&windowed_context, &fb_info, &mut gr_context);
+        let mut surface =
+            super::window::create_surface(&windowed_context, &fb_info, &mut gr_context);
 
         let mut fonts = FnvHashMap::with_capacity_and_hasher(self.fonts.len(), Default::default());
         for (name, font) in self.fonts {
@@ -209,10 +181,8 @@ where
             fonts.insert(name, font);
         }
 
-        let render_context = RenderContext2D::new_ex(
-            self.bounds.width(), self.bounds.height(),
-            surface, fonts
-        );
+        let render_context =
+            RenderContext2D::new_ex(self.bounds.width(), self.bounds.height(), surface, fonts);
 
         self.shell.window_shells.push(Window::new(
             windowed_context,
@@ -220,6 +190,8 @@ where
             render_context,
             self.request_receiver,
             scale_factor,
+            fb_info,
+            gr_context,
         ))
     }
 
