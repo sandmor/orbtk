@@ -6,14 +6,14 @@ pub mod prelude;
 
 pub use orbtk_utils::prelude as utils;
 
-#[cfg(all(feature = "default", not(feature = "glupath")))]
+#[cfg(all(feature = "default", not(feature = "glupath"), not(feature = "skia")))]
 mod common;
 
 #[cfg(all(not(target_arch = "wasm32"), feature = "glupath"))]
 #[path = "pathfinder/mod.rs"]
 pub mod platform;
 
-#[cfg(any(target_arch = "wasm32", feature = "glupath"))]
+#[cfg(any(target_arch = "wasm32", any(feature = "glupath", feature = "skia")))]
 pub use self::platform::*;
 
 #[cfg(all(
@@ -35,15 +35,18 @@ pub mod platform;
 
 #[cfg(all(
     not(target_arch = "wasm32"),
-    any(feature = "default", feature = "skia"),
+    feature = "default",
     not(feature = "glupath"),
+    not(feature = "skia")
 ))]
 pub mod concurrent;
 
+
 #[cfg(all(
     not(target_arch = "wasm32"),
-    any(feature = "default", feature = "skia"),
+    feature = "default",
     not(feature = "glupath"),
+    not(feature = "skia")
 ))]
 pub use self::concurrent::*;
 

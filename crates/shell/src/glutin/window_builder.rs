@@ -1,18 +1,30 @@
 use std::{collections::HashMap, sync::mpsc, sync::Arc};
 
-use font_kit::handle::Handle;
 use glutin::{
     dpi::{LogicalSize, PhysicalSize},
-    window, ContextBuilder, GlProfile, GlRequest,
+    window, ContextBuilder, GlProfile,
 };
+#[cfg(feature = "glupath")]
+use glutin::GlRequest;
+#[cfg(feature = "glupath")]
+use font_kit::handle::Handle;
+#[cfg(feature = "glupath")]
 use pathfinder_color::ColorF;
+#[cfg(feature = "glupath")]
 use pathfinder_geometry::vector::{vec2f, vec2i};
+#[cfg(feature = "glupath")]
 use pathfinder_gl::{GLDevice, GLVersion};
+#[cfg(feature = "glupath")]
 use pathfinder_renderer::gpu::{
     options::{DestFramebuffer, RendererOptions},
     renderer::Renderer,
 };
+#[cfg(feature = "glupath")]
 use pathfinder_resources::embedded::EmbeddedResourceLoader;
+#[cfg(feature = "skia")]
+use skia_safe::{Data, Color, ColorType, Surface, gpu::{BackendRenderTarget, SurfaceOrigin, gl::FramebufferInfo}, typeface::Typeface, font::Font};
+#[cfg(feature = "skia")]
+use fnv::FnvHashMap;
 
 use super::{Shell, Window};
 
@@ -119,6 +131,99 @@ where
         self
     }
 
+    #[cfg(feature = "skia")]
+    /// Builds the window shell and add it to the application `Shell`.
+    pub fn build(self) {
+        type WindowedContext = glutin::ContextWrapper<glutin::PossiblyCurrent, glutin::window::Window>;
+        use std::convert::TryInto;
+        use gl::types::GLint;
+
+        let windowed_context = ContextBuilder::new()
+            .with_gl_profile(GlProfile::Core)
+            .with_depth_buffer(0)
+            .with_stencil_buffer(8)
+            .with_pixel_format(24, 8)
+            .with_double_buffer(Some(true))
+            .build_windowed(self.window_builder, self.shell.event_loop())
+            .unwrap();
+
+        // Load OpenGL, and make the context current.
+        let windowed_context = unsafe { windowed_context.make_current().unwrap() };
+        gl::load_with(|name| windowed_context.get_proc_address(name) as *const _);
+
+        let scale_factor = windowed_context.window().current_monitor().scale_factor();
+
+        let mut gr_context = skia_safe::gpu::Context::new_gl(None).unwrap();
+
+        let fb_info = {
+            let mut fboid: GLint = 0;
+            unsafe { gl::GetIntegerv(gl::FRAMEBUFFER_BINDING, &mut fboid) };
+
+            FramebufferInfo {
+                fboid: fboid.try_into().unwrap(),
+                format: skia_safe::gpu::gl::Format::RGBA8.into(),
+            }
+        };
+
+        windowed_context
+            .window()
+            .set_inner_size(glutin::dpi::Size::new(glutin::dpi::LogicalSize::new(
+                1024.0, 1024.0,
+            )));
+
+        fn create_surface(
+            windowed_context: &WindowedContext,
+            fb_info: &FramebufferInfo,
+            gr_context: &mut skia_safe::gpu::Context,
+        ) -> skia_safe::Surface {
+            let pixel_format = windowed_context.get_pixel_format();
+            let size = windowed_context.window().inner_size();
+            let backend_render_target = BackendRenderTarget::new_gl(
+                (
+                    size.width.try_into().unwrap(),
+                    size.height.try_into().unwrap(),
+                ),
+                pixel_format.multisampling.map(|s| s.try_into().unwrap()),
+                pixel_format.stencil_bits.try_into().unwrap(),
+                *fb_info,
+            );
+            Surface::from_backend_render_target(
+                gr_context,
+                &backend_render_target,
+                SurfaceOrigin::BottomLeft,
+                ColorType::RGBA8888,
+                None,
+                None,
+            )
+            .unwrap()
+        };
+
+        let mut surface = create_surface(&windowed_context, &fb_info, &mut gr_context);
+
+        let mut fonts = FnvHashMap::with_capacity_and_hasher(self.fonts.len(), Default::default());
+        for (name, font) in self.fonts {
+            let font_data = Data::new_copy(font);
+            let typeface = Typeface::from_data(font_data, None).unwrap();
+            let font = Font::from_typeface(typeface, None);
+
+            fonts.insert(name, font);
+        }
+
+        let render_context = RenderContext2D::new_ex(
+            self.bounds.width(), self.bounds.height(),
+            surface, fonts
+        );
+
+        self.shell.window_shells.push(Window::new(
+            windowed_context,
+            self.adapter,
+            render_context,
+            self.request_receiver,
+            scale_factor,
+        ))
+    }
+
+    #[cfg(feature = "glupath")]
     /// Builds the window shell and add it to the application `Shell`.
     pub fn build(self) {
         // Create an OpenGL 3.x context for Pathfinder to use.

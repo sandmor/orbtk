@@ -1,6 +1,6 @@
-use skia_safe::{Canvas, ISize, OwnedCanvas};
-use crate::utils::*;
-use crate::*;
+use crate::{utils::*, PipelineTrait, RenderConfig, RenderTarget, TextMetrics};
+use skia_safe::{Surface, Canvas, Color4f, font::Font as SFont, path::Path};
+use fnv::FnvHashMap;
 
 mod image;
 
@@ -10,17 +10,22 @@ pub struct Font {}
 
 /// The RenderContext2D trait, provides the rendering ctx. It is used for drawing shapes, text, images, and other objects.
 pub struct RenderContext2D {
+    surface: Surface,
+    fonts_store: FnvHashMap<String, SFont>,
+    path: Path,
+
+    background: Color4f
 }
 
 impl RenderContext2D {
     /// Creates a new render ctx 2d.
-    pub fn new(width: f64, height: f64) -> Self {
-        Self {}
+    pub fn new_ex(width: f64, height: f64, surface: Surface, fonts: FnvHashMap<String, SFont>) -> Self {
+        Self { surface, fonts_store: fonts, background: to_color_4f(Color::default()), path: Path::new() }
     }
 
     /// Set the background of the render context.
     pub fn set_background(&mut self, background: Color) {
-        todo!()
+        self.background = to_color_4f(background);
     }
 
     pub fn resize(&mut self, width: f64, height: f64) {
@@ -49,6 +54,21 @@ impl RenderContext2D {
         todo!()
     }
 
+    pub fn measure(
+        &mut self,
+        text: &str,
+        font_size: f64,
+        family: impl Into<String>,
+    ) -> TextMetrics {
+        let measure = match self.fonts_store.get(&family.into()).and_then(|font| font.with_size(font_size as f32)).map(|font| font.measure_str(text, None)) {
+            Some((_,  measure)) => measure,
+            None => {
+                return TextMetrics::default();
+            }
+        };
+        TextMetrics { width: (measure.right - measure.left) as f64, height: (measure.bottom - measure.top) as f64 }
+    }
+
     /// Returns a TextMetrics object.
     pub fn measure_text(&mut self, text: &str) -> TextMetrics {
         todo!()
@@ -66,7 +86,7 @@ impl RenderContext2D {
 
     /// Starts a new path by emptying the list of sub-paths. Call this when you want to create a new path.
     pub fn begin_path(&mut self) {
-        todo!()
+        self.path = Path::new();
     }
 
     /// Attempts to add a straight line from the current point to the start of the current sub-path. If the shape has already been closed or has only one point, this function does nothing.
@@ -217,7 +237,14 @@ impl RenderContext2D {
     }
 
     pub fn start(&mut self) {
-        todo!()
+        self.surface.canvas().clear(self.background.clone());
     }
-    pub fn finish(&mut self) {}
+
+    pub fn finish(&mut self) {
+        self.surface.canvas().flush();
+    }
+}
+
+fn to_color_4f(color: Color) -> Color4f {
+    Color4f::new((color.r() as f32) * 255.0, (color.g() as f32) * 255.0, (color.b() as f32) * 255.0, (color.a() as f32) * 255.0)
 }
