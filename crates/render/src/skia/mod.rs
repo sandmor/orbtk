@@ -4,9 +4,10 @@ use skia_safe::{
     font::Font as SFont,
     paint::{Paint, Style},
     path::Path,
-    Canvas, Color4f, Point as SPoint, Rect, Surface,
+    Canvas, Color4f, Point as SPoint, Rect, Surface
 };
 use smallvec::SmallVec;
+use std::ops::{Deref, DerefMut};
 
 mod image;
 
@@ -14,14 +15,35 @@ pub use self::image::*;
 
 pub struct Font {}
 
+struct OwnedCanvas(*mut Canvas);
+
+impl Deref for OwnedCanvas {
+    type Target = Canvas;
+
+    fn deref(&self) -> &Self::Target {
+        unsafe {
+            &*self.0
+        }
+    }
+}
+
+impl DerefMut for OwnedCanvas {
+    fn deref_mut(&mut self) -> &mut Canvas {
+        unsafe {
+            &mut *self.0
+        }
+    }
+}
+
 type StatesOnStack = [RenderConfig; 2];
 
 /// The RenderContext2D trait, provides the rendering ctx. It is used for drawing shapes, text, images, and other objects.
 pub struct RenderContext2D {
-    fonts_store: FnvHashMap<String, SFont>,
+    fonts_store: FnvHashMap<String, (f64, SFont)>,
     config: RenderConfig,
     saved_states: SmallVec<StatesOnStack>,
     surface: Surface,
+    canvas: OwnedCanvas,
     path: Path,
     paint: Paint,
 
@@ -33,16 +55,22 @@ impl RenderContext2D {
     pub fn new_ex(
         width: f64,
         height: f64,
-        surface: Surface,
+        mut surface: Surface,
         fonts: FnvHashMap<String, SFont>,
     ) -> Self {
         let mut paint = Paint::default();
         paint.set_anti_alias(true);
+        let canvas = unsafe { OwnedCanvas(surface.canvas() as *mut Canvas) };
+        let mut fonts_store = FnvHashMap::with_capacity_and_hasher(fonts.len(), Default::default());
+        for (id, font) in fonts {
+            fonts_store.insert(id, (0.0, font));
+        }
         Self {
-            fonts_store: fonts,
+            fonts_store,
             config: RenderConfig::default(),
             saved_states: SmallVec::<StatesOnStack>::new(),
             surface,
+            canvas,
             path: Path::new(),
             paint,
             background: to_color_4f(Color::default()),
@@ -56,6 +84,7 @@ impl RenderContext2D {
 
     pub fn resize(&mut self, new_surface: Surface, _width: f64, _height: f64) {
         self.surface = new_surface;
+        self.canvas = unsafe { OwnedCanvas(self.surface.canvas() as *mut Canvas) };
     }
 
     /// Registers a new font file.
@@ -85,8 +114,7 @@ impl RenderContext2D {
     /// Draws a filled rectangle whose starting point is at the coordinates {x, y} with the specified width and height and whose style is determined by the fillStyle attribute.
     pub fn fill_rect(&mut self, x: f64, y: f64, width: f64, height: f64) {
         self.update_paint(false);
-        let canvas = self.surface.canvas();
-        canvas.draw_rect(
+        self.canvas.draw_rect(
             Rect::new(x as f32, y as f32, (x + width) as f32, (y + height) as f32),
             &self.paint,
         );
@@ -95,33 +123,62 @@ impl RenderContext2D {
     /// Draws a rectangle that is stroked (outlined) according to the current strokeStyle and other ctx settings.
     pub fn stroke_rect(&mut self, x: f64, y: f64, width: f64, height: f64) {
         self.update_paint(true);
-        let canvas = self.surface.canvas();
-        canvas.draw_rect(
+        self.canvas.draw_rect(
             Rect::new(x as f32, y as f32, (x + width) as f32, (y + height) as f32),
             &self.paint,
         );
     }
 
+    /// Draws a filled rectangle whose starting point is at the coordinates {x, y} with the specified width and height and whose style is determined by the fillStyle attribute.
+    pub fn fill_round_rect(&mut self, x: f64, y: f64, width: f64, height: f64, rx: f64, ry: f64) {
+        self.update_paint(false);
+        self.canvas.draw_round_rect(
+            Rect::new(x as f32, y as f32, (x + width) as f32, (y + height) as f32),
+            rx as f32, ry as f32, &self.paint,
+        );
+    }
+
+    /// Draws a rectangle that is stroked (outlined) according to the current strokeStyle and other ctx settings.
+    pub fn stroke_round_rect(&mut self, x: f64, y: f64, width: f64, height: f64, rx: f64, ry: f64) {
+        self.update_paint(true);
+        self.canvas.draw_round_rect(
+            Rect::new(x as f32, y as f32, (x + width) as f32, (y + height) as f32),
+            rx as f32, ry as f32, &self.paint,
+        );
+    }
+
     // Text
+
+    fn update_font(&mut self) {
+        let entry = match self.fonts_store.get_mut(&self.config.font_config.family) {
+            Some(font) => font,
+            None => {
+                return;
+            }
+        };
+        let size = self.config.font_config.font_size;
+        if entry.0 != size {
+            if let Some(new_font) = entry.1.with_size(size as f32) {
+                *entry = (size, new_font);
+            }
+        }
+    }
 
     /// Draws (fills) a given text at the given (x, y) position.
     pub fn fill_text(&mut self, text: &str, x: f64, y: f64) {
         self.update_paint(false);
-        let canvas = self.surface.canvas();
-        self.paint.set_style(Style::Fill);
-        drop(canvas);
-        if let Some(font) = self
-            .fonts_store
-            .get(&self.config.font_config.family)
-            .and_then(|font| font.with_size(self.config.font_config.font_size as f32))
-        {
-            self.surface.canvas().draw_str(
-                text,
-                SPoint::new(x as f32, (y + self.config.font_config.font_size) as f32),
-                &font,
-                &self.paint,
-            );
-        }
+        self.update_font();
+        let font = match self.fonts_store.get(&self.config.font_config.family) {
+            Some(font) => &font.1,
+            None => return
+        };
+
+        self.canvas.draw_str(
+            text,
+            SPoint::new(x as f32, (y as f32)+(self.config.font_config.font_size as f32)),
+            font,
+            &self.paint,
+        );
     }
 
     pub fn measure(
@@ -130,46 +187,56 @@ impl RenderContext2D {
         font_size: f64,
         family: impl Into<String>,
     ) -> TextMetrics {
-        let measure = match self
-            .fonts_store
-            .get(&family.into())
-            .and_then(|font| font.with_size(font_size as f32))
-            .map(|font| font.measure_str(text, None))
-        {
-            Some((_, measure)) => measure,
+        let tuple = match self.fonts_store.get(&family.into()) {
+            Some(font) => font,
             None => {
-                return TextMetrics::default();
+                return TextMetrics::default()
             }
         };
+        let measure;
+        if tuple.0 == font_size {
+            measure = tuple.1.measure_str(text, Some(&self.paint)).1;
+        }
+        else {
+            measure = match tuple.1.with_size(font_size as f32) {
+                Some(font) => font.measure_str(text, None).1,
+                None => {
+                    return TextMetrics::default();
+                }
+            };
+        }
         TextMetrics {
-            width: (measure.right - measure.left) as f64,
-            height: (measure.bottom - measure.top) as f64,
+            width: measure.width() as f64,
+            height: measure.height() as f64,
         }
     }
 
     /// Returns a TextMetrics object.
     pub fn measure_text(&mut self, text: &str) -> TextMetrics {
-        self.measure(
-            text,
-            self.config.font_config.font_size,
-            self.config.font_config.family.clone(),
-        )
+        self.update_font();
+        let font = match self.fonts_store.get(&self.config.font_config.family) {
+            Some(font) => &font.1,
+            None => {
+                return TextMetrics::default();
+            }
+        };
+        let measure = font.measure_str(text, Some(&self.paint)).1;
+        TextMetrics {
+            width: measure.width() as f64,
+            height: measure.height() as f64,
+        }
     }
 
     /// Fills the current or given path with the current file style.
     pub fn fill(&mut self) {
         self.update_paint(false);
-        let canvas = self.surface.canvas();
-        self.paint.set_style(Style::Fill);
-        canvas.draw_path(&self.path, &self.paint);
+        self.canvas.draw_path(&self.path, &self.paint);
     }
 
     /// Strokes {outlines} the current or given path with the current stroke style.
     pub fn stroke(&mut self) {
         self.update_paint(true);
-        let canvas = self.surface.canvas();
-        self.paint.set_style(Style::Stroke);
-        canvas.draw_path(&self.path, &self.paint);
+        self.canvas.draw_path(&self.path, &self.paint);
     }
 
     /// Starts a new path by emptying the list of sub-paths. Call this when you want to create a new path.
@@ -199,9 +266,19 @@ impl RenderContext2D {
                 (x + radius) as f32,
                 (y + radius) as f32,
             ),
-            start_angle as f32,
-            end_angle as f32,
+            (start_angle.to_degrees()) as f32,
+            (end_angle.to_degrees()) as f32,
         );
+    }
+
+    pub fn fill_circle(&mut self, x: f64, y: f64, radius: f64) {
+        self.update_paint(false);
+        self.canvas.draw_circle(SPoint::new(x as f32, y as f32), radius as f32, &self.paint);
+    }
+
+    pub fn stroke_circle(&mut self, x: f64, y: f64, radius: f64) {
+        self.update_paint(true);
+        self.canvas.draw_circle(SPoint::new(x as f32, y as f32), radius as f32, &self.paint);
     }
 
     /// Begins a new sub-path at the point specified by the given {x, y} coordinates.
@@ -262,7 +339,7 @@ impl RenderContext2D {
 
     /// Creates a clipping path from the current sub-paths. Everything drawn after clip() is called appears inside the clipping path only.
     pub fn clip(&mut self) {
-        self.surface.canvas().clip_path(&self.path, None, None);
+        self.canvas.clip_path(&self.path, None, None);
     }
 
     // Line styles
@@ -319,13 +396,13 @@ impl RenderContext2D {
     /// Saves the entire state of the canvas by pushing the current state onto a stack.
     pub fn save(&mut self) {
         self.saved_states.push(self.config.clone());
-        self.surface.canvas().save();
+        self.canvas.save();
     }
 
     /// Restores the most recently saved canvas state by popping the top entry in the drawing state stack.
     /// If there is no saved state, this method does nothing.
     pub fn restore(&mut self) {
-        self.surface.canvas().restore();
+        self.canvas.restore();
         if let Some(config) = self.saved_states.pop() {
             self.config = config;
         }
@@ -335,24 +412,12 @@ impl RenderContext2D {
         todo!()
     }
 
-    pub fn data(&self) -> &[u32] {
-        todo!()
-    }
-
-    pub fn data_mut(&mut self) -> &mut [u32] {
-        todo!()
-    }
-
-    pub fn data_u8_mut(&mut self) -> &mut [u8] {
-        todo!()
-    }
-
     pub fn start(&mut self) {
-        self.surface.canvas().clear(self.background.clone());
+        self.canvas.clear(self.background.clone());
     }
 
     pub fn finish(&mut self) {
-        self.surface.canvas().flush();
+        self.canvas.flush();
     }
 }
 
