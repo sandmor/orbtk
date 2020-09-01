@@ -173,9 +173,11 @@ impl RenderContext2D {
             None => return
         };
 
+        let measure = font.measure_str(text, Some(&self.paint)).1;
+
         self.canvas.draw_str(
             text,
-            SPoint::new(x as f32, (y as f32)+(self.config.font_config.font_size as f32)),
+            SPoint::new(x as f32, (y as f32)+-measure.top()),
             font,
             &self.paint,
         );
