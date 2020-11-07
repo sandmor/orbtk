@@ -363,6 +363,41 @@ Theme (
                 )
             ]
         ),
+        "table_view": (
+            base: "base",
+            properties: {
+                "foreground": "$CONTENT_FOREGROUND",
+                "background": "$CONTAINER_BACKGROUND",
+                "border_brush": "$CONTAINER_BORDER",
+                "border_width": 1,
+                "border_radius": 2,
+            },
+        ),
+        "table_view_item": (
+            properties: {
+                "font_size": "$FONT_SIZE_12",
+                "foreground": "$CONTENT_FOREGROUND",
+                "background": "transparent",
+                "padding_left": 8,
+                "padding_right": 8,
+            },
+            states: [
+                (
+                    key: "selected",
+                    properties: {
+                        "foreground": "$CONTENT_FOREGROUND_INVERTED",
+                        "background": "$ACCENT_COLOR",
+                    }
+                ),
+                (
+                    key: "pressed",
+                    properties: {
+                        "foreground": "$CONTENT_FOREGROUND_INVERTED",
+                        "background": "$ACCENT_COLOR",
+                    }
+                )
+            ]
+        ),
         "combo_box": (
             base: "base",
             properties: {
