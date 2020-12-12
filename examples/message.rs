@@ -43,7 +43,7 @@ impl State for MainState {
     }
 }
 
-widget!(MainView<MainState> { text: String });
+widget!(MainView<MainState> { text: Text });
 
 impl Template for MainView {
     fn template(self, id: Entity, ctx: &mut BuildContext) -> Self {

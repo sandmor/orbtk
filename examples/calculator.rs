@@ -177,7 +177,7 @@ fn generate_operation_button(
 }
 
 widget!(MainView<MainViewState> {
-    text: String
+    text: Text
 });
 
 impl Template for MainView {

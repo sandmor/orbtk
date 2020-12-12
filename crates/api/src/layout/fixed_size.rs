@@ -189,8 +189,8 @@ fn text(widget: &WidgetContainer) -> Option<String> {
         }
     }
 
-    if let Some(text) = widget.try_get::<String>("text") {
-        return Some(text.clone());
+    if let Some(text) = widget.try_get::<Text>("text") {
+        return Some(text.export_string());
     }
 
     None

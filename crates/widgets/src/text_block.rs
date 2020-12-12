@@ -14,10 +14,11 @@ impl TextBlockState {
             return;
         }
 
-        let text = TextBlock::text_clone(&ctx.widget());
+        // TODO
+        /*let text = TextBlock::text_clone(&ctx.widget());
         let localized_text = ctx.localize_text(text);
 
-        TextBlock::localized_text_set(&mut ctx.widget(), localized_text);
+        TextBlock::localized_text_set(&mut ctx.widget(), localized_text);*/
     }
 }
 
@@ -50,7 +51,7 @@ widget!(
     /// **style:** `text-block`
     TextBlock<TextBlockState> {
         /// Sets or shares the text property.
-        text: String,
+        text: Text,
 
         /// If the `TextBlock` is localizable and the localized text is not empty, the localized_text will be drawn.
         localized_text: String,

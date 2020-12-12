@@ -66,7 +66,7 @@ widget!(
         echo: char,
 
         /// Sets or shares the text property.It holds the password.
-        text: String,
+        text: Text,
 
         /// Sets or shares the water_mark text property.
         water_mark: String,

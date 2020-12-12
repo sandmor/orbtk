@@ -27,7 +27,7 @@ widget!(
         foreground: Brush,
 
         /// Sets or shares the text property.
-        text: String,
+        text: Text,
 
         /// Sets or shares the font size property.
         font_size: f64,

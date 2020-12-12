@@ -15,7 +15,7 @@ widget!(
     KeyDownHandler,
     TextInputHandler {
         /// Sets or shares the text property.
-        text: String,
+        text: Text,
 
         /// Sets or shares the water_mark text property.
         water_mark: String,
@@ -74,7 +74,6 @@ impl Template for TextBox {
             .water_mark(id)
             .font(id)
             .font_size(id)
-            .localizable(false)
             .build(ctx);
 
         let cursor = Cursor::new().id(ID_CURSOR).selection(id).build(ctx);

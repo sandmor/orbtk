@@ -78,8 +78,8 @@ fn text(widget: &WidgetContainer) -> String {
         }
     }
 
-    if let Some(text) = widget.try_get::<String>("text") {
-        return text.clone();
+    if let Some(text) = widget.try_get::<Text>("text") {
+        return text.export_string();
     }
 
     String::default()

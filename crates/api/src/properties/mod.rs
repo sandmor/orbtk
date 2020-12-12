@@ -79,6 +79,7 @@ where
 // Implementation of PropertySource for default types
 into_property_source!(bool);
 into_property_source!(char);
+into_property_source!(PathBuf);
 into_property_source!(String: &str, utils::Value);
 into_property_source!(usize);
 into_property_source!(u32);
@@ -86,8 +87,6 @@ into_property_source!(f32: utils::Value);
 into_property_source!(f64: i32, f32, utils::Value);
 into_property_source!(i32);
 into_property_source!(i64);
-
-into_property_source!(PathBuf);
 
 // Implementation of PropertySource for utils types
 into_property_source!(utils::Alignment: &str);
@@ -113,6 +112,8 @@ into_property_source!(utils::SelectionMode: &str);
 into_property_source!(utils::Visibility: &str);
 into_property_source!(Vec<String>);
 into_property_source!(utils::Filter: &str, String, Vec<String>, Vec<&str>);
+into_property_source!(utils::LongOptimizedText: &str, String);
+into_property_source!(utils::Text: &str, String);
 
 // Implementation of css types
 into_property_source!(theming::Selector: &str, String);
